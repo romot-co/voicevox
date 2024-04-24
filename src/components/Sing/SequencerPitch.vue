@@ -5,6 +5,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from "vue";
 import * as PIXI from "pixi.js";
+import { argbFromHex } from "@material/material-color-utilities";
 import { useStore } from "@/store";
 import { frequencyToNoteNumber, secondToTick } from "@/sing/domain";
 import { noteNumberToBaseY, tickToBaseX } from "@/sing/viewHelper";
@@ -28,7 +29,13 @@ type PitchLine = {
   readonly lineStrip: LineStrip;
 };
 
-const pitchLineColor = [0.647, 0.831, 0.678, 1]; // RGBA
+const argb = argbFromHex("#819683");
+const pitchLineColor = [
+  ((argb >> 16) & 0xff) / 255, // Red
+  ((argb >> 8) & 0xff) / 255, // Green
+  (argb & 0xff) / 255, // Blue
+  ((argb >> 24) & 0xff) / 255, // Alpha
+];
 const pitchLineWidth = 1.5;
 
 const props = defineProps<{ offsetX: number; offsetY: number }>();
@@ -235,6 +242,8 @@ onMountedOrActivated(() => {
     view: canvasElement,
     backgroundAlpha: 0,
     antialias: true,
+    resolution: window.devicePixelRatio || 1,
+    autoDensity: true,
   });
   stage = new PIXI.Container();
 

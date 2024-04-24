@@ -181,7 +181,7 @@ onUnmounted(() => {
 
 .white-key {
   fill: colors.$sequencer-white-key;
-  stroke: colors.$sequencer-main-divider;
+  stroke: colors.$sequencer-sub-divider;
 }
 
 .white-key-being-pressed {
@@ -194,7 +194,7 @@ onUnmounted(() => {
 }
 
 .black-key-being-pressed {
-  fill: colors.$primary;
+  fill: var(--md-ref-palette-primary80);
 }
 
 .pitchname {

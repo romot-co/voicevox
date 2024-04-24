@@ -7,7 +7,6 @@
         type="number"
         :model-value="keyRangeAdjustmentInputBuffer"
         label="音域調整"
-        dense
         hide-bottom-space
         class="key-range-adjustment"
         @update:model-value="setKeyRangeAdjustmentInputBuffer"
@@ -17,7 +16,6 @@
         type="number"
         :model-value="volumeRangeAdjustmentInputBuffer"
         label="声量調整"
-        dense
         hide-bottom-space
         class="volume-range-adjustment"
         @update:model-value="setVolumeRangeAdjustmentInputBuffer"
@@ -27,7 +25,6 @@
         type="number"
         :model-value="bpmInputBuffer"
         label="テンポ"
-        dense
         hide-bottom-space
         class="sing-tempo"
         @update:model-value="setBpmInputBuffer"
@@ -42,7 +39,6 @@
           type="number"
           :model-value="beatsInputBuffer"
           label="拍子"
-          dense
           hide-bottom-space
           class="sing-time-signature"
           @update:model-value="setBeatsInputBuffer"
@@ -53,7 +49,6 @@
           type="number"
           :model-value="beatTypeInputBuffer"
           label=""
-          dense
           hide-bottom-space
           class="sing-time-signature"
           @update:model-value="setBeatTypeInputBuffer"
@@ -118,7 +113,6 @@
         :options="snapTypeSelectOptions"
         outlined
         color="primary"
-        dense
         text-color="display-on-primary"
         hide-bottom-space
         options-dense
@@ -434,12 +428,12 @@ onUnmounted(() => {
 }
 
 .sing-toolbar {
-  background: colors.$sing-toolbar;
+  background-color: colors.$sing-toolbar;
   align-items: center;
   display: flex;
   justify-content: space-between;
-  min-height: 56px;
-  padding: 0 8px 0 0;
+  min-height: 64px;
+  padding: 0 4px 0 0;
   width: 100%;
 }
 
@@ -460,18 +454,21 @@ onUnmounted(() => {
   margin-left: 16px;
   margin-right: 4px;
   width: 50px;
+  font-weight: 500;
 }
 
 .volume-range-adjustment {
   margin-left: 4px;
   margin-right: 4px;
   width: 50px;
+  font-weight: 500;
 }
 
 .sing-tempo {
   margin-left: 8px;
   margin-right: 4px;
   width: 72px;
+  font-weight: 500;
 }
 
 .sing-tempo-icon {
@@ -500,6 +497,15 @@ onUnmounted(() => {
   top: 5px;
   margin-right: 8px;
   pointer-events: none;
+}
+
+.sing-playback-button {
+  background: #fff;
+  box-shadow: none;
+
+  &::before {
+    box-shadow: 0 2px 4px 0 rgba(colors.$display-rgb, 0.2);
+  }
 }
 
 .sing-playhead-position {
@@ -545,6 +551,6 @@ onUnmounted(() => {
 }
 
 .sing-snap {
-  min-width: 104px;
+  min-width: 120px;
 }
 </style>

@@ -14,11 +14,11 @@
     "text-splitter-hover": "#CCDDFF",
     "active-point-focus": "#E0EAFF",
     "active-point-hover": "#EEF3FF",
-    "sequencer-whitekey-cell": "#F5F7F5",
-    "sequencer-blackkey-cell": "#EAECEA",
+    "sequencer-whitekey-cell": "#FFFFFF",
+    "sequencer-blackkey-cell": "#F2F2F2",
     "sequencer-main-divider": "#B0B0B0",
     "sequencer-sub-divider": "#CECECE",
     "sequencer-white-key": "#FFFFFF",
-    "sequencer-black-key": "#333333"
+    "sequencer-black-key": "#555555"
   }
 }

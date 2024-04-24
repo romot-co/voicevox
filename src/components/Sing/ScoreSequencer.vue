@@ -12,7 +12,7 @@
     <SequencerKeys
       class="sequencer-keys"
       :offset="scrollY"
-      :black-key-width="28"
+      :black-key-width="24"
     />
     <!-- シーケンサ -->
     <div
@@ -58,13 +58,17 @@
             />
             <template v-for="(keyInfo, index) in keyInfos" :key="index">
               <line
-                v-if="keyInfo.pitch === 'C'"
+                v-if="keyInfo.pitch === 'C' || keyInfo.pitch === 'F'"
                 x1="0"
                 :x2="gridCellWidth"
-                :y1="gridCellHeight * (index + 1)"
-                :y2="gridCellHeight * (index + 1)"
+                :y1="gridCellHeight * (index + 1) + 0.5"
+                :y2="gridCellHeight * (index + 1) + 0.5"
                 stroke-width="1"
-                class="sequencer-grid-octave-line"
+                :class="
+                  keyInfo.pitch === 'C'
+                    ? 'sequencer-grid-octave-line'
+                    : 'sequencer-grid-f-line'
+                "
               />
             </template>
           </pattern>
@@ -77,8 +81,8 @@
             <line
               v-for="n in beatsPerMeasure"
               :key="n"
-              :x1="beatWidth * (n - 1)"
-              :x2="beatWidth * (n - 1)"
+              :x1="beatWidth * (n - 1) + 0.5"
+              :x2="beatWidth * (n - 1) + 0.5"
               y1="0"
               y2="100%"
               stroke-width="1"
@@ -1332,16 +1336,18 @@ const contextMenuData = ref<ContextMenuItemData[]>([
 .score-sequencer {
   backface-visibility: hidden;
   display: grid;
-  grid-template-rows: 30px 1fr;
+  grid-template-rows: 32px 1fr;
   grid-template-columns: 48px 1fr;
 }
 
 .sequencer-corner {
+  height: 36px;
   grid-row: 1;
   grid-column: 1;
-  background: colors.$background;
+  background: colors.$sing-ruler;
   border-top: 1px solid colors.$sequencer-sub-divider;
   border-bottom: 1px solid colors.$sequencer-sub-divider;
+  z-index: 1;
 }
 
 .sequencer-ruler {
@@ -1369,12 +1375,12 @@ const contextMenuData = ref<ContextMenuItemData[]>([
 .sequencer-grid {
   display: block;
   pointer-events: none;
+  shape-rendering: crispEdges;
 }
 
 .sequencer-grid-cell {
   display: block;
-  stroke: rgba(colors.$sequencer-sub-divider-rgb, 0.3);
-  stroke-width: 1;
+  shape-rendering: crispEdges;
 }
 
 .sequencer-grid-octave-cell {
@@ -1384,6 +1390,13 @@ const contextMenuData = ref<ContextMenuItemData[]>([
 .sequencer-grid-octave-line {
   backface-visibility: hidden;
   stroke: colors.$sequencer-main-divider;
+  shape-rendering: crispEdges;
+}
+
+.sequencer-grid-f-line {
+  backface-visibility: hidden;
+  stroke: colors.$sequencer-sub-divider;
+  shape-rendering: crispEdges;
 }
 
 .sequencer-grid-cell-white {
@@ -1397,11 +1410,13 @@ const contextMenuData = ref<ContextMenuItemData[]>([
 .sequencer-grid-measure-line {
   backface-visibility: hidden;
   stroke: colors.$sequencer-main-divider;
+  shape-rendering: crispEdges;
 }
 
 .sequencer-grid-beat-line {
   backface-visibility: hidden;
   stroke: colors.$sequencer-sub-divider;
+  shape-rendering: crispEdges;
 }
 
 .sequencer-guideline {
@@ -1437,12 +1452,11 @@ const contextMenuData = ref<ContextMenuItemData[]>([
 .sequencer-playhead {
   position: absolute;
   top: 0;
-  left: -2px;
-  width: 4px;
+  left: 0;
+  width: 1.5px;
   height: 100%;
-  background: colors.$primary;
-  border-left: 1px solid rgba(colors.$background-rgb, 0.83);
-  border-right: 1px solid rgba(colors.$background-rgb, 0.83);
+  background: colors.$sequencer-playhead;
+  will-change: transform;
 }
 
 .rect-select-preview {

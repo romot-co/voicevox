@@ -74,7 +74,7 @@ const props = withDefaults(
 );
 const store = useStore();
 const state = store.state;
-const height = ref(32);
+const height = ref(40);
 const playheadTicks = ref(0);
 const tpqn = computed(() => state.tpqn);
 const timeSignatures = computed(() => state.timeSignatures);
@@ -193,9 +193,11 @@ onUnmounted(() => {
 @use "@/styles/colors" as colors;
 
 .sequencer-ruler {
-  background: colors.$background;
+  background: colors.$sing-ruler;
   position: relative;
   overflow: hidden;
+  height: 36px;
+  z-index: 1;
 }
 
 .sequencer-ruler-border-bottom {
@@ -204,20 +206,17 @@ onUnmounted(() => {
   top: 0;
   width: 100%;
   height: 100%;
-  border-top: 1px solid colors.$sequencer-sub-divider;
-  border-bottom: 1px solid colors.$sequencer-sub-divider;
 }
 
 .sequencer-ruler-playhead {
   position: absolute;
   top: 0;
-  left: -2px;
-  width: 4px;
+  left: 0;
+  width: 1.5px;
   height: 100%;
-  background: colors.$primary;
-  border-left: 1px solid rgba(colors.$background-rgb, 0.83);
-  border-right: 1px solid rgba(colors.$background-rgb, 0.83);
+  background: colors.$sequencer-playhead;
   pointer-events: none;
+  will-change: transform;
 }
 
 .sequencer-ruler-measure-number {
@@ -226,6 +225,6 @@ onUnmounted(() => {
 
 .sequencer-ruler-measure-line {
   backface-visibility: hidden;
-  stroke: rgba(colors.$display-rgb, 0.3);
+  stroke: colors.$sequencer-main-divider;
 }
 </style>
