@@ -27,34 +27,37 @@
         label="テンポ"
         hide-bottom-space
         class="sing-tempo"
-        @update:model-value="setBpmInputBuffer"
         @change="setTempo"
-      >
-        <template #prepend>
-          <QIcon name="music_note" size="xs" class="sing-tempo-icon" />
-        </template>
-      </QInput>
-      <div class="sing-beats">
-        <QInput
-          type="number"
-          :model-value="beatsInputBuffer"
-          label="拍子"
-          hide-bottom-space
-          class="sing-time-signature"
-          @update:model-value="setBeatsInputBuffer"
-          @change="setTimeSignature"
-        />
-        <div class="sing-beats-separator">/</div>
-        <QInput
-          type="number"
-          :model-value="beatTypeInputBuffer"
-          label=""
-          hide-bottom-space
-          class="sing-time-signature"
-          @update:model-value="setBeatTypeInputBuffer"
-          @change="setTimeSignature"
-        />
-      </div>
+      />
+      <QField label="拍子" hide-bottom-space dense>
+        <div class="sing-beats">
+          <QSelect
+            :model-value="timeSignatures[0].beats"
+            :options="beatsOptions"
+            hide-bottom-space
+            hide-dropdown-icon
+            dense
+            options-dense
+            transition-show="none"
+            transition-hide="none"
+            class="sing-time-signature"
+            @update:model-value="setBeats"
+          />
+          <div class="sing-beats-separator">/</div>
+          <QSelect
+            :model-value="timeSignatures[0].beatType"
+            :options="beatTypeOptions"
+            hide-bottom-space
+            hide-dropdown-icon
+            dense
+            options-dense
+            transition-show="none"
+            transition-hide="none"
+            class="sing-time-signature"
+            @update:model-value="setBeatType"
+          />
+        </div>
+      </QField>
     </div>
     <!-- player -->
     <div class="sing-player">
@@ -115,6 +118,7 @@
         color="primary"
         text-color="display-on-primary"
         hide-bottom-space
+        hide-dropdown-icon
         options-dense
         label="スナップ"
         transition-show="none"
@@ -195,10 +199,21 @@ const keyRangeAdjustment = computed(
 const volumeRangeAdjustment = computed(
   () => store.getters.SELECTED_TRACK.volumeRangeAdjustment,
 );
+const beatsOptions = computed(() => {
+  return Array.from({ length: 32 }, (_, i) => ({
+    label: (i + 1).toString(),
+    value: i + 1,
+  }));
+});
+
+const beatTypeOptions = computed(() => {
+  return [2, 4, 8, 16, 32].map((beatType) => ({
+    label: beatType.toString(),
+    value: beatType,
+  }));
+});
 
 const bpmInputBuffer = ref(120);
-const beatsInputBuffer = ref(4);
-const beatTypeInputBuffer = ref(4);
 const keyRangeAdjustmentInputBuffer = ref(0);
 const volumeRangeAdjustmentInputBuffer = ref(0);
 
@@ -206,15 +221,6 @@ watch(
   tempos,
   () => {
     bpmInputBuffer.value = tempos.value[0].bpm;
-  },
-  { deep: true, immediate: true },
-);
-
-watch(
-  timeSignatures,
-  () => {
-    beatsInputBuffer.value = timeSignatures.value[0].beats;
-    beatTypeInputBuffer.value = timeSignatures.value[0].beatType;
   },
   { deep: true, immediate: true },
 );
@@ -241,22 +247,6 @@ const setBpmInputBuffer = (bpmStr: string | number | null) => {
     return;
   }
   bpmInputBuffer.value = bpmValue;
-};
-
-const setBeatsInputBuffer = (beatsStr: string | number | null) => {
-  const beatsValue = Number(beatsStr);
-  if (!isValidBeats(beatsValue)) {
-    return;
-  }
-  beatsInputBuffer.value = beatsValue;
-};
-
-const setBeatTypeInputBuffer = (beatTypeStr: string | number | null) => {
-  const beatTypeValue = Number(beatTypeStr);
-  if (!isValidBeatType(beatTypeValue)) {
-    return;
-  }
-  beatTypeInputBuffer.value = beatTypeValue;
 };
 
 const setKeyRangeAdjustmentInputBuffer = (
@@ -289,14 +279,28 @@ const setTempo = () => {
   });
 };
 
-const setTimeSignature = () => {
-  const beats = beatsInputBuffer.value;
-  const beatType = beatTypeInputBuffer.value;
+const setBeats = (beats: { label: string; value: number }) => {
+  if (!isValidBeats(beats.value)) {
+    return;
+  }
   store.dispatch("COMMAND_SET_TIME_SIGNATURE", {
     timeSignature: {
       measureNumber: 1,
-      beats,
-      beatType,
+      beats: beats.value,
+      beatType: timeSignatures.value[0].beatType,
+    },
+  });
+};
+
+const setBeatType = (beatType: { label: string; value: number }) => {
+  if (!isValidBeatType(beatType.value)) {
+    return;
+  }
+  store.dispatch("COMMAND_SET_TIME_SIGNATURE", {
+    timeSignature: {
+      measureNumber: 1,
+      beats: timeSignatures.value[0].beats,
+      beatType: beatType.value,
     },
   });
 };
@@ -482,7 +486,7 @@ onUnmounted(() => {
 .sing-beats {
   align-items: center;
   display: flex;
-  margin-left: 8px;
+  //margin-left: 8px;
   position: relative;
 }
 
@@ -491,6 +495,7 @@ onUnmounted(() => {
   position: relative;
   width: 32px;
 }
+
 .sing-beats-separator {
   color: rgba(colors.$display-rgb, 0.6);
   position: relative;
@@ -551,6 +556,6 @@ onUnmounted(() => {
 }
 
 .sing-snap {
-  min-width: 120px;
+  min-width: 80px;
 }
 </style>

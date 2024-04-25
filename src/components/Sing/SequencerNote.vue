@@ -278,8 +278,8 @@ const onLyricInput = (event: Event) => {
   &.selected {
     .note-bar {
       background: var(--md-ref-palette-primary80);
-      border-color: var(--md-ref-palette-primary70);
-      outline: 2px solid var(--md-ref-palette-primary70);
+      border-color: var(--md-ref-palette-primary90);
+      outline: 2px solid var(--md-ref-palette-primary90);
       z-index: 1;
     }
   }
@@ -288,7 +288,7 @@ const onLyricInput = (event: Event) => {
     .note-bar {
       background: var(--md-ref-palette-primary80);
       border-color: var(--md-ref-palette-primary70);
-      outline: 2px solid var(--md-ref-palette-primary70);
+      outline: 2px solid var(--md-ref-palette-primary90);
     }
 
     .note-lyric {
@@ -336,7 +336,7 @@ const onLyricInput = (event: Event) => {
   position: absolute;
   width: calc(100% + 1px);
   height: 100%;
-  background-color: var(--md-source);
+  background-color: var(--md-ref-palette-primary70);
   border-radius: 4px;
   cursor: move;
 }
@@ -351,7 +351,7 @@ const onLyricInput = (event: Event) => {
   z-index: 11;
 
   &:hover {
-    background-color: var(--md-ref-palette-primary70);
+    background-color: var(--md-ref-palette-primary90);
   }
 }
 
@@ -365,7 +365,7 @@ const onLyricInput = (event: Event) => {
   z-index: 11;
 
   &:hover {
-    background-color: var(--md-ref-palette-primary70);
+    background-color: var(--md-ref-palette-primary90);
   }
 }
 

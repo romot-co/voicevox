@@ -55,6 +55,8 @@
               :width="gridCellWidth"
               :height="gridCellHeight"
               :class="`sequencer-grid-cell sequencer-grid-cell-${keyInfo.color}`"
+              stroke-width="1"
+              stroke="rgba(0, 0, 0, 0.1)"
             />
             <template v-for="(keyInfo, index) in keyInfos" :key="index">
               <line
