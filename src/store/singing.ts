@@ -1,4 +1,6 @@
+/// <reference types="dom-webcodecs" />
 import path from "path";
+import { Muxer, ArrayBufferTarget } from "mp4-muxer";
 import { toRaw } from "vue";
 import { createPartialStore } from "./vuex";
 import { createUILockAction } from "./ui";
@@ -1860,6 +1862,118 @@ export const singingStore = createPartialStore<SingingStoreTypes>({
           return buffer;
         };
 
+        // AudioBufferからAACファイルを生成
+        const convertToAacFileData = async (
+          audioBuffer: AudioBuffer,
+        ): Promise<ArrayBuffer> => {
+          // AudioEncoderとAudioDataがサポートされていない場合はエラー
+          if (!("AudioEncoder" in window && "AudioData" in window)) {
+            throw new Error(
+              "AudioEncoder is not supported in this environment.",
+            );
+          }
+
+          const sampleRate = audioBuffer.sampleRate;
+          const numberOfChannels = audioBuffer.numberOfChannels;
+          const duration = audioBuffer.duration;
+
+          // 無効・空なAudioBufferが渡された場合はエラー
+          if (numberOfChannels === 0 || duration === 0) {
+            throw new Error(
+              "Invalid AudioBuffer: no channels or zero duration",
+            );
+          }
+
+          const frameCount = Math.ceil(sampleRate * duration);
+          const samplesPerFrame = 1024; // 1024サンプルで1フレーム(AAC Standard)
+
+          // マルチプレクサ
+          const mp4Muxer = new Muxer({
+            target: new ArrayBufferTarget(),
+            audio: {
+              codec: "aac", // AAC
+              sampleRate,
+              numberOfChannels,
+            },
+            fastStart: "in-memory", // インメモリで実行(高速)
+          });
+
+          // AudioEncoderのインスタンスを作成
+          const audioEncoder = new AudioEncoder({
+            output: (
+              chunk: EncodedAudioChunk,
+              metadata: EncodedAudioChunkMetadata,
+            ) => {
+              mp4Muxer.addAudioChunk(chunk, metadata);
+            },
+            error: (error: DOMException) => {
+              console.error("AudioEncoder error:", error);
+              throw error;
+            },
+          });
+
+          // AudioEncoderの設定
+          audioEncoder.configure({
+            codec: "mp4a.40.5", // HE-AAC, 変更できるようにする
+            sampleRate,
+            numberOfChannels,
+            bitrate: 192_000, // 192 kbps, 変更できるようにする
+          });
+
+          // AudioDataを作成
+          const createAudioData = (
+            startSample: number,
+            frameSamples: number,
+            timestamp: number,
+          ): AudioData => {
+            const audioData = new Float32Array(frameSamples * numberOfChannels);
+            for (let channel = 0; channel < numberOfChannels; channel++) {
+              const channelData = audioBuffer.getChannelData(channel);
+              for (let i = 0; i < frameSamples; i++) {
+                audioData[i * numberOfChannels + channel] =
+                  channelData[startSample + i];
+              }
+            }
+            return new AudioData({
+              format: "f32",
+              sampleRate: audioBuffer.sampleRate,
+              numberOfFrames: frameSamples,
+              numberOfChannels: numberOfChannels,
+              timestamp: timestamp,
+              data: audioData,
+            });
+          };
+
+          // エンコード
+          let timestampOffset = 0;
+          for (
+            let frameIndex = 0;
+            frameIndex * samplesPerFrame < frameCount;
+            frameIndex++
+          ) {
+            if (audioEncoder.state === "closed") {
+              throw new Error("AudioEncoder is closed");
+            }
+            const startSample = frameIndex * samplesPerFrame;
+            const frameSamples = Math.min(
+              samplesPerFrame,
+              frameCount - startSample,
+            );
+            const audioData = createAudioData(
+              startSample,
+              frameSamples,
+              timestampOffset,
+            );
+            timestampOffset += (frameSamples / sampleRate) * 1_000_000; // ms
+            audioEncoder.encode(audioData);
+            audioData.close();
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          }
+          await audioEncoder.flush();
+          mp4Muxer.finalize();
+          return (mp4Muxer.target as ArrayBufferTarget).buffer;
+        };
+
         const generateWriteErrorMessage = (writeFileResult: ResultError) => {
           if (writeFileResult.code) {
             const code = writeFileResult.code.toUpperCase();
@@ -2019,17 +2133,29 @@ export const singingStore = createPartialStore<SingingStoreTypes>({
           // TODO: オフラインレンダリング後にメモリーがきちんと開放されるか確認する
           offlineTransport.schedule(0, renderDuration);
           const audioBuffer = await offlineAudioContext.startRendering();
-          const waveFileData = convertToWavFileData(audioBuffer);
 
           try {
-            await window.backend
-              .writeFile({
+            // WAVファイルの出力
+            const waveFileData = convertToWavFileData(audioBuffer);
+            await window.backend.writeFile({
                 filePath,
                 buffer: waveFileData,
               })
               .then(getValueOrThrow);
+
+            // AACファイルの出力
+            const aacFileData = await convertToAacFileData(audioBuffer);
+            const aacFilePath = path.join(
+              path.dirname(filePath),
+              path.basename(filePath, ".wav") + ".m4a",
+            );
+            await window.backend.writeFile({
+                filePath: aacFilePath,
+                buffer: aacFileData,
+              })
+              .then(getValueOrThrow);
           } catch (e) {
-            logger.error("Failed to exoprt the wav file.", e);
+            logger.error("Failed to export the audio file.", e);
             if (e instanceof ResultError) {
               return {
                 result: "WRITE_ERROR",
@@ -2045,8 +2171,6 @@ export const singingStore = createPartialStore<SingingStoreTypes>({
                 "不明なエラーが発生しました。",
             };
           }
-
-          return { result: "SUCCESS", path: filePath };
         };
 
         commit("SET_NOW_AUDIO_EXPORTING", { nowAudioExporting: true });
