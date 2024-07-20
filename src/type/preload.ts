@@ -634,7 +634,7 @@ export const COLOR_ROLES: Record<string, ColorRoleDefinition> = {
   tertiaryFixedDim: ["tertiary", 80, 80],
   onTertiaryFixed: ["tertiary", 10, 10],
   onTertiaryFixedVariant: ["tertiary", 30, 30],
-  error: ["error", 60, 80],
+  error: ["error", 55, 80],
   onError: ["error", 100, 20],
   errorContainer: ["error", 90, 30],
   onErrorContainer: ["error", 10, 90],

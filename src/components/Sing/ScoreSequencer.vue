@@ -1551,8 +1551,8 @@ const contextMenuData = computed<ContextMenuItemData[]>(() => {
 .rect-select-preview {
   pointer-events: none;
   position: absolute;
-  border: 1px dashed var(--md-sys-color-secondary);
-  background: var(--md-sys-color-secondary-container);
+  border: 1px dashed var(--md-sys-color-outline);
+  background: transparent;
 }
 
 .cursor-draw {

@@ -30,25 +30,31 @@ export const hexFromOklch = (oklchCoords: OKLCHCoords): string => {
   }
 };
 
-// OKLch色空間のパラメータ範囲
+// OKLCHの制約
 const MIN_L = 0;
 const MAX_L = 1;
 const MIN_C = 0;
-const MAX_C = 0.5;
+const MAX_C = 0.4;
+const MIN_H = 0;
+const MAX_H = 360;
 
-// ベースカラーの調整
+// ベースカラー調整関数
 export const adjustBaseColor = (
   baseColor: OKLCHCoords,
-  chromaAdjustment: number = 0,
-  hueAdjustment: number = 0,
+  isDark: boolean,
 ): OKLCHCoords => {
-  const color = new Color("oklch", baseColor);
+  let [l, c, h] = baseColor;
 
-  color.l = Math.max(MIN_L, Math.min(MAX_L, baseColor[0]));
-  color.c = Math.max(MIN_C, Math.min(MAX_C, color.c + chromaAdjustment));
-  color.h = (color.h + hueAdjustment) % 360;
+  // 明度の調整
+  l = isDark ? 1 - l : l;
 
-  return [color.l, color.c, color.h];
+  // 彩度の調整
+  c = Math.max(MIN_C, Math.min(MAX_C, c));
+
+  // 色相の調整
+  h = (h + MAX_H) % MAX_H;
+
+  return [l, c, h];
 };
 
 // 補正明るさ取得
@@ -70,46 +76,38 @@ const getLightness = (
   return toneColor;
 };
 
-// カラーブレンド
+// カラーブレンド関数
 export const blendColors = (
   color1: OKLCHCoords,
   color2: OKLCHCoords,
   amount: number,
 ): OKLCHCoords => {
-  try {
-    const c1 = new Color("oklch", color1);
-    const c2 = new Color("oklch", color2);
-    const blended = Color.mix(c1, c2, amount, { space: "oklch" });
-    return [blended.oklch.l, blended.oklch.c, blended.oklch.h];
-  } catch (error) {
-    console.warn(`Failed to blend colors: ${color1}, ${color2}`, error);
-    return color1;
-  }
+  const blendedColor = color1.map(
+    (value, index) => value * (1 - amount) + color2[index] * amount,
+  ) as OKLCHCoords;
+
+  return blendedColor;
 };
 
-// コントラスト取得
+// コントラスト取得関数
 export const getContrastRatio = (
   color1: OKLCHCoords,
   color2: OKLCHCoords,
 ): number => {
-  try {
-    const c1 = new Color("oklch", color1);
-    const c2 = new Color("oklch", color2);
-    return Color.contrastWCAG21(c1, c2);
-  } catch (error) {
-    console.warn(`Failed to get contrast ratio: ${color1}, ${color2}`, error);
-    return 1;
-  }
+  const color1SRGB = new Color("oklch", color1).to("srgb");
+  const color2SRGB = new Color("oklch", color2).to("srgb");
+  const contrast = Color.contrastWCAG21(color1SRGB, color2SRGB);
+  return contrast;
 };
 
-// パレット生成
+// パレット生成関数
 export const generatePalette = (
   baseColors: ColorSchemeBaseColors,
   isDark: boolean,
 ): Record<string, OKLCHCoords> => {
   const palette: Record<string, OKLCHCoords> = {};
   Object.entries(baseColors).forEach(([key, colorValue]) => {
-    const baseColor = adjustBaseColor(colorValue, 0, 0);
+    const baseColor = adjustBaseColor(colorValue, isDark);
     PALETTE_TONES.forEach((tone) => {
       palette[`${key}${tone}`] = getLightness(baseColor, tone, isDark);
     });
@@ -117,7 +115,7 @@ export const generatePalette = (
   return palette;
 };
 
-// カスタムカラー生成
+// カスタムカラー生成関数
 export const generateCustomColors = (
   customColors: CustomColorConfig[],
   baseColors: ColorSchemeBaseColors,
@@ -127,12 +125,11 @@ export const generateCustomColors = (
   const customColorMap: Record<string, OKLCHCoords> = {};
 
   customColors.forEach((config) => {
-    const baseColor = adjustBaseColor(baseColors[config.palette], 0, 0);
+    const baseColor = adjustBaseColor(baseColors[config.palette], isDark);
     const tone = isDark ? config.darkLightness : config.lightLightness;
     let color = getLightness(baseColor, tone, isDark);
 
     if (config.blend) {
-      // NOTE: いったんパレットから選択
       const surfaceColor = palette[isDark ? "neutral10" : "neutral99"];
       color = blendColors(color, surfaceColor, 0.15);
     }
@@ -143,51 +140,14 @@ export const generateCustomColors = (
   return customColorMap;
 };
 
-// コントラストターゲットにあわせる(仮)
-const adjustColorsForContrast = (
-  colors: Record<string, OKLCHCoords>,
-  contrastVersus: Record<string, Record<string, number>>,
-  isDark: boolean,
-): Record<string, OKLCHCoords> => {
-  const adjustedColors = { ...colors };
-
-  Object.entries(contrastVersus).forEach(([colorName, versus]) => {
-    Object.entries(versus).forEach(([contrastAgainst, minContrast]) => {
-      if (adjustedColors[colorName] && adjustedColors[contrastAgainst]) {
-        const currentContrast = getContrastRatio(
-          adjustedColors[colorName],
-          adjustedColors[contrastAgainst],
-        );
-        let loopIndex = 0;
-        const isStopLoop = 10;
-
-        while (currentContrast < minContrast && loopIndex < isStopLoop) {
-          const [l, c, h] = adjustedColors[colorName];
-          const lightnessAdjustment = isDark ? -0.005 : 0.005;
-          const chromaAdjustment = isDark ? -0.001 : 0.001;
-
-          adjustedColors[colorName] = [
-            l + lightnessAdjustment,
-            Math.max(0, c + chromaAdjustment * (isDark ? -1 : 1)),
-            (h + lightnessAdjustment * 2) % 360,
-          ];
-          loopIndex++;
-        }
-      }
-    });
-  });
-
-  return adjustedColors;
-};
-
-// カラースキーム生成
+// カラースキーム生成関数
 export const generateColorScheme = (config: ColorSchemeConfig): ColorScheme => {
   const palette = generatePalette(config.baseColors, config.isDark);
 
   const roles: Record<string, OKLCHCoords> = {};
   Object.entries(COLOR_ROLES).forEach(([name, [base, light, dark]]) => {
     roles[name] = getLightness(
-      adjustBaseColor(config.baseColors[base], 0, 0),
+      adjustBaseColor(config.baseColors[base], config.isDark),
       config.isDark ? dark : light,
       config.isDark,
     );
@@ -200,30 +160,17 @@ export const generateColorScheme = (config: ColorSchemeConfig): ColorScheme => {
     palette,
   );
 
-  const contrastVersus: Record<string, Record<string, number>> = {};
-  config.customColors?.forEach((color) => {
-    if (color.contrastVs) {
-      contrastVersus[color.name] = color.contrastVs;
-    }
-  });
-
-  const adjustedCustomColors = adjustColorsForContrast(
-    customColors,
-    contrastVersus,
-    config.isDark,
-  );
-
-  const scheme = {
+  const colorScheme = {
     config,
     palette,
     roles,
-    customColors: adjustedCustomColors,
+    customColors,
   };
 
-  const report = evaluateContrastAndGenerateResults(scheme, config);
+  const report = evaluateContrastAndGenerateResults(colorScheme, config);
   printContrastResults(report);
 
-  return scheme;
+  return colorScheme;
 };
 
 // CSSVariablesにコンバート
@@ -487,7 +434,7 @@ export function printContrastResults(results: ContrastCheckResult[]): void {
   console.warn("The following color contrasts need attention:");
   results.forEach((result) => {
     console.warn(`
-    Name: ${result.color1Name}
+    Name: ${result.color1Name} vs ${result.color2Name}
     Colors: ${hexFromOklch(result.color1)} vs ${hexFromOklch(result.color2)}
     Check Type: ${result.checkType}
     Contrast Ratio: ${result.contrastRatio.toFixed(2)}:1

@@ -329,7 +329,7 @@ export const settingStore = createPartialStore<SettingStoreTypes>({
               displayName: "singGridCellWhite",
               palette: "neutral",
               lightLightness: 100,
-              darkLightness: 15,
+              darkLightness: 18,
               blend: true,
               contrastVs: {
                 singGridCellBlack: 1.0,
@@ -339,8 +339,8 @@ export const settingStore = createPartialStore<SettingStoreTypes>({
               name: "singGridCellBlack",
               displayName: "singGridCellBlack",
               palette: "neutral",
-              lightLightness: 98,
-              darkLightness: 12,
+              lightLightness: 97,
+              darkLightness: 14,
               blend: true,
               contrastVs: {
                 singGridCellWhite: 1.0,
@@ -405,7 +405,7 @@ export const settingStore = createPartialStore<SettingStoreTypes>({
               name: "singGridBeatLine",
               displayName: "singGridBeatLine",
               palette: "neutral",
-              lightLightness: 88,
+              lightLightness: 90,
               darkLightness: 0,
               blend: true,
               contrastVs: {
@@ -428,7 +428,7 @@ export const settingStore = createPartialStore<SettingStoreTypes>({
               displayName: "singPianoKeyWhite",
               palette: "neutral",
               lightLightness: 99,
-              darkLightness: 80,
+              darkLightness: 84,
               blend: true,
               contrastVs: {
                 singPianoKeyBlack: 3.0,
@@ -454,17 +454,6 @@ export const settingStore = createPartialStore<SettingStoreTypes>({
               blend: true,
               contrastVs: {
                 singGridCellBlack: 1.2,
-              },
-            },
-            {
-              name: "singNoteBarOutline",
-              displayName: "singNoteBarOutline",
-              palette: "neutral",
-              lightLightness: 40,
-              darkLightness: 30,
-              blend: true,
-              contrastVs: {
-                singGridCellBlack: 3.0,
               },
             },
             {
