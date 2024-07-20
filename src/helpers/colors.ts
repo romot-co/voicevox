@@ -37,6 +37,37 @@ const MAX_C = 0.4;
 const MIN_H = 0;
 const MAX_H = 360;
 
+// 追加スキーマ(仮: 適当に設定...理屈に合わせたい)
+export const generateVoiceVoxVitaminColors = (
+  baseColors: ColorSchemeBaseColors,
+): ColorSchemeBaseColors => {
+  const [l, c, h] = baseColors.primary;
+  return {
+    primary: [Math.min(l * 1.1, 0.72), Math.min(c * 1.5, MAX_C), h],
+    secondary: [
+      baseColors.secondary[0] + 0.1,
+      Math.min(baseColors.secondary[1] * 1.5, 0.35),
+      baseColors.secondary[2],
+    ],
+    tertiary: [
+      Math.min(l * 1.05, 0.72),
+      Math.min(c * 1.1, 0.4),
+      (h + 180) % 360,
+    ],
+    neutral: [Math.min(l * 0.9, MAX_L), Math.min(c * 0.1, MAX_C), h],
+    neutralVariant: [
+      Math.min(baseColors.neutralVariant[0], MAX_L),
+      Math.min(baseColors.neutralVariant[1], MAX_C),
+      baseColors.neutralVariant[2],
+    ],
+    error: [
+      Math.min(baseColors.error[0] * 1.5, MAX_L),
+      Math.min(baseColors.error[1] * 1.5, MAX_C),
+      baseColors.error[2],
+    ],
+  };
+};
+
 // ベースカラー調整関数
 export const adjustBaseColor = (
   baseColor: OKLCHCoords,
@@ -144,8 +175,10 @@ export const generateRoleColors = (
 };
 
 export const generateColorScheme = (config: ColorSchemeConfig): ColorScheme => {
-  const palette = generatePalette(config.baseColors, config.isDark);
-  const roles = generateRoleColors(config.baseColors, config.isDark);
+  let baseColors = config.baseColors;
+  baseColors = generateVoiceVoxVitaminColors(config.baseColors);
+  const palette = generatePalette(baseColors, config.isDark);
+  const roles = generateRoleColors(baseColors, config.isDark);
   const customColors = generateCustomColors(
     config.customColors ?? [],
     config.baseColors,
