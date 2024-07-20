@@ -318,7 +318,7 @@ export const settingStore = createPartialStore<SettingStoreTypes>({
             primary: [85, 0.115, 149.64],
             secondary: [82.62, 0.05, 149.64],
             tertiary: [75, 0.18, 60],
-            neutral: [50, 0.001, 149.64],
+            neutral: [50, 0, 149.64],
             neutralVariant: [50, 0.01, 149.64],
             error: [59.21, 0.17, 17.843],
           },
