@@ -176,7 +176,7 @@ export const generateRoleColors = (
 
 export const generateColorScheme = (config: ColorSchemeConfig): ColorScheme => {
   let baseColors = config.baseColors;
-  baseColors = generateVoiceVoxVitaminColors(config.baseColors);
+  //baseColors = generateVoiceVoxVitaminColors(config.baseColors);
   const palette = generatePalette(baseColors, config.isDark);
   const roles = generateRoleColors(baseColors, config.isDark);
   const customColors = generateCustomColors(
