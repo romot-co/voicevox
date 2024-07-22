@@ -1,132 +1,155 @@
-import Color from "colorjs.io";
+import { Color, oklch, css, srgb, mix } from "@thi.ng/color";
 
 import {
-  OKLCHCoords,
   ColorSchemeConfig,
-  ColorSchemeBaseColors,
   CustomColorConfig,
   ColorScheme,
   PALETTE_TONES,
   COLOR_ROLES,
 } from "@/type/preload";
 
-// HexからOKLCHに変換
-export const oklchFromHex = (hex: string): OKLCHCoords => {
-  try {
-    const color = new Color(hex);
-    return [color.l, color.c, color.h];
-  } catch (error) {
-    throw new Error(`Failed to convert hex to OKLCH: ${hex}, ${error}`);
-  }
+// 最小・最大
+const MIN_CHROMA = 0.005;
+const MAX_CHROMA = 0.4; // 最大彩度: OKLCHの実用限度 // Gammutいりそう
+const LIGHT_MIN_L = 0.0;
+const LIGHT_MAX_L = 1.0;
+const DARK_MIN_L = 0.08; // 最小明るさ制限
+const DARK_MAX_L = 0.98; // 最大明るさ制限
+
+// デフォルト
+const SECONDARY_HUE_SHIFT = 0;
+const TERTIARY_HUE_SHIFT = 120;
+const PRIMARY_CHROMA = 0.1;
+const SECONDARY_CHROMA = PRIMARY_CHROMA / 2.5;
+
+// 仮
+const hermiteInterpolation = (
+  t: number,
+  p0: number,
+  p1: number,
+  m0: number,
+  m1: number,
+): number => {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  return (
+    (2 * t3 - 3 * t2 + 1) * p0 +
+    (t3 - 2 * t2 + t) * m0 +
+    (-2 * t3 + 3 * t2) * p1 +
+    (t3 - t2) * m1
+  );
 };
 
-export const hexFromOklch = (oklchCoords: OKLCHCoords): string => {
-  try {
-    const color = new Color("oklch", oklchCoords);
-    return color.to("srgb").toString({ format: "hex" });
-  } catch (error) {
-    throw new Error(`Failed to convert OKLCH to hex: ${oklchCoords}, ${error}`);
-  }
-};
-
-// OKLCHの制約
-const MIN_L = 0;
-const MAX_L = 1;
-const MIN_C = 0;
-const MAX_C = 0.4;
-const MIN_H = 0;
-const MAX_H = 360;
-
-// 追加スキーマ(仮: 適当に設定...理屈に合わせたい)
-export const generateVoiceVoxVitaminColors = (
-  baseColors: ColorSchemeBaseColors,
-): ColorSchemeBaseColors => {
-  const [l, c, h] = baseColors.primary;
-  return {
-    primary: [Math.min(l * 1.1, 0.72), Math.min(c * 1.5, MAX_C), h],
-    secondary: [
-      baseColors.secondary[0] + 0.1,
-      Math.min(baseColors.secondary[1] * 1.5, 0.35),
-      baseColors.secondary[2],
-    ],
-    tertiary: [
-      Math.min(l * 1.05, 0.72),
-      Math.min(c * 1.1, 0.4),
-      (h + 180) % 360,
-    ],
-    neutral: [Math.min(l * 0.9, MAX_L), Math.min(c * 0.1, MAX_C), h],
-    neutralVariant: [
-      Math.min(baseColors.neutralVariant[0], MAX_L),
-      Math.min(baseColors.neutralVariant[1], MAX_C),
-      baseColors.neutralVariant[2],
-    ],
-    error: [
-      Math.min(baseColors.error[0] * 1.5, MAX_L),
-      Math.min(baseColors.error[1] * 1.5, MAX_C),
-      baseColors.error[2],
-    ],
-  };
-};
-
-// ベースカラー調整関数
-export const adjustBaseColor = (
-  baseColor: OKLCHCoords,
+// TODO: HCTのパレットトーン設定とはOKLCHのLは当然一致せずめんどくさい形に
+// OKLCHの考え方からしても、本来Lの設定値だけ変えればいいはずなので、パレットトーン設定側を見直すのが本筋？
+export const adjustColor = (
+  baseColor: Color,
+  targetLightness: number,
   isDark: boolean,
-): OKLCHCoords => {
-  let [l, c, h] = baseColor;
+): Color => {
+  const [, c, h] = oklch(baseColor);
 
-  // 明度の調整
-  l = isDark ? 1 - l : l;
-  // 彩度の調整
-  c = Math.max(MIN_C, Math.min(MAX_C, c));
-  // 色相の調整
-  h = (h + MAX_H) % MAX_H;
+  const normalizedTargetL = targetLightness / 100;
+  let adjustedLightness: number;
 
-  return [l, c, h];
-};
-
-// 補正明るさ取得
-const getLightness = (
-  baseColor: OKLCHCoords,
-  toneValue: number,
-  isDark: boolean,
-): OKLCHCoords => {
-  const toneColor = [...baseColor] as OKLCHCoords;
-  toneColor[0] = toneValue / 100;
   if (isDark) {
-    const baseLightness = 0.08 + (1 - toneValue / 100) * 0.08;
-    toneColor[0] = baseLightness + (toneValue / 100) * 0.92;
+    // ダークモードのトーンカーブ補正(明度が微妙に一致しないため)
+    // 0,1は維持 / 暗い方を少し持ち上げる / 明るい方を少し押し下げる
+    const darkCurve = (t: number) => {
+      return Math.max(
+        Math.min(hermiteInterpolation(t, 0, 1, 1.8, 0.9), DARK_MAX_L),
+        DARK_MIN_L,
+      );
+    };
+    adjustedLightness = darkCurve(normalizedTargetL);
   } else {
-    // ライトモードはそのまま
-    toneColor[0] = toneValue / 100;
+    // ライトモードは線形のまま
+    adjustedLightness = Math.max(
+      Math.min(normalizedTargetL, LIGHT_MAX_L),
+      LIGHT_MIN_L,
+    );
   }
 
-  return toneColor;
+  // クロマの調整（明度に応じた非線形調整）
+  const chromaFactor = 1 - Math.pow(Math.abs(2 * adjustedLightness - 1), 2);
+  const maxChroma = MAX_CHROMA * chromaFactor;
+  const adjustedChroma = Math.max(MIN_CHROMA, Math.min(c, maxChroma));
+
+  return oklch([adjustedLightness, adjustedChroma, h]);
 };
 
 // カラーブレンド関数
 export const blendColors = (
-  color1: OKLCHCoords,
-  color2: OKLCHCoords,
+  color1: Color,
+  color2: Color,
   amount: number,
-): OKLCHCoords => {
-  const blendedColor = color1.map(
-    (value, index) => value * (1 - amount) + color2[index] * amount,
-  ) as OKLCHCoords;
+): Color => {
+  return mix([], oklch(color1), oklch(color2), amount);
+};
 
-  return blendedColor;
+// 新しい関数: ベースカラーから他の色を生成
+const generateColorSet = (
+  primaryColor: Color,
+  config: ColorSchemeConfig,
+): Record<string, Color> => {
+  const colors: Record<string, Color> = {
+    primary: primaryColor,
+  };
+
+  if (config.baseColors.secondary) {
+    colors.secondary = oklch(config.baseColors.secondary);
+  } else {
+    const [, , h] = oklch(primaryColor);
+    colors.secondary = oklch([
+      config.isDark ? 0.3 : 0.7,
+      SECONDARY_CHROMA,
+      (h + SECONDARY_HUE_SHIFT) % 1,
+    ]);
+  }
+
+  if (config.baseColors.tertiary) {
+    colors.tertiary = oklch(config.baseColors.tertiary);
+  } else {
+    const [, , h] = oklch(primaryColor);
+    colors.tertiary = oklch([
+      config.isDark ? 0.3 : 0.7,
+      PRIMARY_CHROMA,
+      (h + TERTIARY_HUE_SHIFT) % 1,
+    ]);
+  }
+
+  if (config.baseColors.neutral) {
+    colors.neutral = oklch(config.baseColors.neutral);
+  } else {
+    const [l, , h] = oklch(primaryColor);
+    colors.neutral = oklch([l, MIN_CHROMA, h]);
+  }
+
+  if (config.baseColors.neutralVariant) {
+    colors.neutralVariant = oklch(config.baseColors.neutralVariant);
+  } else {
+    const [l, c, h] = oklch(colors.neutral);
+    colors.neutralVariant = oklch([l, c * 1.2, h]);
+  }
+
+  if (config.baseColors.error) {
+    colors.error = oklch(config.baseColors.error);
+  } else {
+    colors.error = oklch([0.5, 0.3, 25 / 360]);
+  }
+
+  return colors;
 };
 
 // パレット生成関数
 export const generatePalette = (
-  baseColors: ColorSchemeBaseColors,
+  baseColors: Record<string, Color[]>,
   isDark: boolean,
-): Record<string, OKLCHCoords> => {
-  const palette: Record<string, OKLCHCoords> = {};
+): Record<string, Color> => {
+  const palette: Record<string, Color> = {};
   Object.entries(baseColors).forEach(([key, colorValue]) => {
-    const baseColor = adjustBaseColor(colorValue, isDark);
     PALETTE_TONES.forEach((tone) => {
-      palette[`${key}${tone}`] = getLightness(baseColor, tone, isDark);
+      palette[`${key}${tone}`] = adjustColor(colorValue[0], tone, isDark);
     });
   });
   return palette;
@@ -135,20 +158,20 @@ export const generatePalette = (
 // カスタムカラー生成関数
 export const generateCustomColors = (
   customColors: CustomColorConfig[],
-  baseColors: ColorSchemeBaseColors,
+  baseColors: Record<string, Color[]>,
   isDark: boolean,
-  palette: Record<string, OKLCHCoords>,
-): Record<string, OKLCHCoords> => {
-  const customColorMap: Record<string, OKLCHCoords> = {};
+  palette: Record<string, Color>,
+): Record<string, Color> => {
+  const customColorMap: Record<string, Color> = {};
 
   customColors.forEach((config) => {
-    const baseColor = adjustBaseColor(baseColors[config.palette], isDark);
-    const tone = isDark ? config.darkLightness : config.lightLightness;
-    let color = getLightness(baseColor, tone, isDark);
+    const basePalette = baseColors[config.palette];
+    const lightness = isDark ? config.darkLightness : config.lightLightness;
+    let color = adjustColor(basePalette[0], lightness, isDark);
 
     if (config.blend) {
-      const surfaceColor = palette[isDark ? "neutral10" : "neutral99"];
-      color = blendColors(color, surfaceColor, 0.15);
+      const surfaceColor = palette[isDark ? "primary10" : "primary90"];
+      color = blendColors(color, surfaceColor, 0);
     }
 
     customColorMap[config.name] = color;
@@ -159,44 +182,44 @@ export const generateCustomColors = (
 
 // ロールごとのカラーを生成
 export const generateRoleColors = (
-  baseColors: ColorSchemeBaseColors,
+  baseColors: Record<string, Color[]>,
   isDark: boolean,
-): Record<string, OKLCHCoords> => {
-  const roles: Record<string, OKLCHCoords> = {};
+): Record<string, Color> => {
+  const roles: Record<string, Color> = {};
   Object.entries(COLOR_ROLES).forEach(([name, [base, light, dark]]) => {
-    roles[name] = getLightness(
-      adjustBaseColor(baseColors[base], isDark),
-      isDark ? dark : light,
-      isDark,
-    );
+    const lightness = isDark ? dark : light;
+    const color = adjustColor(baseColors[base][0], lightness, isDark);
+    roles[name] = color;
   });
 
   return roles;
 };
 
+// カラースキーム生成
 export const generateColorScheme = (config: ColorSchemeConfig): ColorScheme => {
-  let baseColors = config.baseColors;
-  //baseColors = generateVoiceVoxVitaminColors(config.baseColors);
+  const primaryKeyColor = oklch(config.baseColors.primary);
+  const baseHue = primaryKeyColor.h;
+  const primaryColor = oklch([0.4, PRIMARY_CHROMA, baseHue]);
+  const baseColorsArray = generateColorSet(primaryColor, config);
+  const baseColors: Record<string, Color[]> = {};
+  Object.keys(baseColorsArray).forEach((key) => {
+    baseColors[key] = [baseColorsArray[key]];
+  });
   const palette = generatePalette(baseColors, config.isDark);
   const roles = generateRoleColors(baseColors, config.isDark);
   const customColors = generateCustomColors(
     config.customColors ?? [],
-    config.baseColors,
+    baseColors,
     config.isDark,
     palette,
   );
 
-  const colorScheme = {
+  return {
     config,
     palette,
     roles,
     customColors,
   };
-
-  const report = evaluateContrastAndGenerateResults(colorScheme, config, false);
-  printContrastResults(report);
-
-  return colorScheme;
 };
 
 // CSSVariablesにコンバート
@@ -209,10 +232,12 @@ export const cssVariablesFromColorScheme = (
     return str.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase();
   };
 
-  const setColorVar = (prefix: string, key: string, value: OKLCHCoords) => {
-    cssVars[`--${prefix}-${toKebabCase(key)}`] = hexFromOklch(value);
+  const setColorVar = (prefix: string, key: string, value: Color) => {
+    const [l, c, h] = oklch(value);
+    const hex = css(srgb(oklch([l, c, h])));
+    cssVars[`--${prefix}-${toKebabCase(key)}`] = hex;
     cssVars[`--${prefix}-${toKebabCase(key)}-oklch`] =
-      `oklch(${value[0]} ${value[1]} ${value[2]})`;
+      `oklch(${l} ${c} ${h * 360})`;
   };
 
   // パレットのCSS変数
@@ -235,162 +260,113 @@ export const cssVariablesFromColorScheme = (
 
 //--- 以下評価用
 
-// WCAGコントラストチェック
-export const getWCAGContrast = (
-  color1: OKLCHCoords,
-  color2: OKLCHCoords,
-): number => {
-  const color1SRGB = new Color("oklch", color1).to("srgb");
-  const color2SRGB = new Color("oklch", color2).to("srgb");
-  const contrast = Color.contrastWCAG21(color1SRGB, color2SRGB);
-  return contrast;
+// WCAG 相対輝度計算関数
+export const getRelativeLuminance = (color: Color): number => {
+  // impl
+  return 1;
 };
 
-// APCAコントラストチェック
-export const getAPCAContrast = (
-  color1: OKLCHCoords,
-  color2: OKLCHCoords,
-): number => {
-  const color1SRGB = new Color("oklch", color1).to("srgb");
-  const color2SRGB = new Color("oklch", color2).to("srgb");
-  return Color.contrastAPCA(color1SRGB, color2SRGB);
+// WCAG2.1 コントラスト比計算関数
+export const getContrastRatio = (color1: Color, color2: Color): number => {
+  const l1 = getRelativeLuminance(color1);
+  const l2 = getRelativeLuminance(color2);
+  return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
 };
 
 interface ContrastCheckResult {
   color1Name: string;
   color2Name: string;
-  color1: OKLCHCoords;
-  color2: OKLCHCoords;
+  color1: string;
+  color2: string;
   wcagContrastRatio: number;
-  apcaContrastValue: number;
   checkType: string;
   wcagEvaluation: string;
-  apcaEvaluation: string;
   functionalCheck: string;
   designCheck: string;
   expectedContrastRatio?: number;
 }
 
-// APCAコントラスト評価
-function evaluateAPCAContrast(
-  apcaContrast: number,
-  fontSize: number,
-  isNormalWeight: boolean,
-): string {
-  const absContrast = Math.abs(apcaContrast);
-  if (fontSize >= 24) {
-    // ラージテキスト（24px以上）
-    if (absContrast >= 60) return "Lc60+ (Preferred)";
-    if (absContrast >= 45) return "Lc45+ (Minimum Large)";
-    return "Fail";
-  } else if (fontSize >= 18) {
-    // ミディアムテキスト（18-23px）
-    if (isNormalWeight) {
-      if (absContrast >= 75) return "Lc75+ (Preferred)";
-      if (absContrast >= 60) return "Lc60+ (Minimum Medium)";
-      return "Fail";
-    } else {
-      if (absContrast >= 60) return "Lc60+ (Preferred Bold)";
-      if (absContrast >= 55) return "Lc55+ (Minimum Medium Bold)";
-      return "Fail";
-    }
-  } else {
-    // スモールテキスト（18px未満）
-    if (isNormalWeight) {
-      if (absContrast >= 90) return "Lc90+ (Preferred)";
-      if (absContrast >= 75) return "Lc75+ (Minimum)";
-      return "Fail";
-    } else {
-      if (absContrast >= 75) return "Lc75+ (Preferred Bold)";
-      if (absContrast >= 60) return "Lc60+ (Minimum Bold)";
-      return "Fail";
-    }
-  }
-}
-
-// コントラスト評価関数
-function evaluateContrast(
-  wcagContrastRatio: number,
-  apcaContrastValue: number,
+export const evaluateContrast = (
+  contrastRatio: number,
   checkType: string,
+  color1: Color,
+  color2: Color,
   color1Name: string,
   color2Name: string,
-  color1: OKLCHCoords,
-  color2: OKLCHCoords,
   expectedContrastRatio?: number,
-): ContrastCheckResult {
-  const wcagAANormal = wcagContrastRatio >= 4.5;
-  const wcagAALarge = wcagContrastRatio >= 3;
-  const wcagAAANormal = wcagContrastRatio >= 7;
-  const wcagAAALarge = wcagContrastRatio >= 4.5;
+): ContrastCheckResult => {
+  const wcagAANormal = contrastRatio >= 4.5;
+  const wcagAALarge = contrastRatio >= 3;
+  const wcagAAANormal = contrastRatio >= 7;
+  const wcagAAALarge = contrastRatio >= 4.5;
 
-  let wcagEvaluation = "";
-  let apcaEvaluation = "";
+  // 機能チェック
   let functionalCheck = "";
+  // デザイン基準チェック
   let designCheck = "";
 
   switch (checkType) {
     case "text":
-      wcagEvaluation = wcagAAANormal ? "AAA" : wcagAANormal ? "AA" : "Fail";
-      apcaEvaluation = evaluateAPCAContrast(apcaContrastValue, 16, true);
-      functionalCheck = apcaEvaluation.includes("Fail") ? "Fail" : "Pass";
-      designCheck = Math.abs(apcaContrastValue) >= 75 ? "Good" : "Poor";
+      functionalCheck = wcagAAANormal
+        ? "Pass AAA"
+        : wcagAANormal
+          ? "Pass AA"
+          : "Fail";
+      designCheck = "N/A";
       break;
     case "largeText":
-      wcagEvaluation = wcagAAALarge ? "AAA" : wcagAALarge ? "AA" : "Fail";
-      apcaEvaluation = evaluateAPCAContrast(apcaContrastValue, 24, true);
-      functionalCheck = apcaEvaluation.includes("Fail") ? "Fail" : "Pass";
-      designCheck = Math.abs(apcaContrastValue) >= 60 ? "Good" : "Poor";
+      functionalCheck = wcagAAALarge
+        ? "Pass AAA"
+        : wcagAALarge
+          ? "Pass AA"
+          : "Fail";
+      designCheck = "N/A";
       break;
     case "ui":
-      wcagEvaluation = wcagAALarge ? "Pass" : "Fail";
-      apcaEvaluation = evaluateAPCAContrast(apcaContrastValue, 24, false);
-      functionalCheck = apcaEvaluation.includes("Fail") ? "Fail" : "Pass";
-      designCheck = Math.abs(apcaContrastValue) >= 45 ? "Good" : "Poor";
+      functionalCheck = wcagAALarge ? "Pass" : "Fail";
+      designCheck = contrastRatio >= 3.0 ? "Good" : "Poor";
       break;
     case "structure":
-      wcagEvaluation = wcagContrastRatio >= 1.5 ? "Pass" : "Fail";
-      apcaEvaluation = Math.abs(apcaContrastValue) >= 15 ? "Pass" : "Fail";
-      functionalCheck = apcaEvaluation;
-      designCheck = Math.abs(apcaContrastValue) >= 20 ? "Good" : "Poor";
+      functionalCheck = contrastRatio >= 1.5 ? "Pass" : "Fail";
+      designCheck = contrastRatio >= 1.5 ? "Good" : "Poor";
       break;
     case "decorative":
-      wcagEvaluation = "N/A";
-      apcaEvaluation = Math.abs(apcaContrastValue) >= 5 ? "Pass" : "Fail";
       functionalCheck = "N/A";
-      designCheck = Math.abs(apcaContrastValue) >= 7 ? "Good" : "Poor";
+      designCheck = contrastRatio >= 1.2 ? "Good" : "Poor";
       break;
-    default:
-      wcagEvaluation = "Unknown";
-      apcaEvaluation = "Unknown";
-      functionalCheck = "Unknown";
-      designCheck = "Unknown";
+    case "custom":
+      functionalCheck = "Custom";
+      designCheck = "Custom";
+      break;
   }
 
   return {
-    color1,
-    color2,
+    color1: css(color1),
+    color2: css(color2),
     color1Name,
     color2Name,
-    wcagContrastRatio,
-    apcaContrastValue,
+    wcagContrastRatio: contrastRatio,
     checkType,
-    wcagEvaluation,
-    apcaEvaluation,
+    wcagEvaluation:
+      contrastRatio >= 7
+        ? "AAA"
+        : contrastRatio >= 4.5
+          ? "AA"
+          : contrastRatio >= 3
+            ? "AA Large"
+            : "Fail",
     functionalCheck,
     designCheck,
     expectedContrastRatio,
   };
 }
 
-// コントラストチェックしてレポートを出力
-export function evaluateContrastAndGenerateResults(
+export const evaluateContrastAndGenerateResults = (
   colorScheme: ColorScheme,
   config: ColorSchemeConfig,
-  evaluateAPCAContrast: boolean,
-): ContrastCheckResult[] {
+): ContrastCheckResult[] => {
   const results: ContrastCheckResult[] = [];
-  const colors: Record<string, OKLCHCoords> = {
+  const colors: Record<string, Color> = {
     ...colorScheme.roles,
     ...colorScheme.customColors,
   };
@@ -403,35 +379,27 @@ export function evaluateContrastAndGenerateResults(
   ) {
     const color1 = colors[color1Name];
     const color2 = colors[color2Name];
-    if (!color1 || !color2) {
-      console.warn(`Could not find colors: ${color1Name} or ${color2Name}`);
-      return;
-    }
-    const wcagContrastRatio = getWCAGContrast(color1, color2);
-    const apcaContrastValue = evaluateAPCAContrast
-      ? getAPCAContrast(color1, color2)
-      : 0;
+
+    const contrastRatio = getContrastRatio(color1, color2);
     const result = evaluateContrast(
-      wcagContrastRatio,
-      apcaContrastValue,
+      contrastRatio,
       checkType,
-      color1Name,
-      color2Name,
       color1,
       color2,
+      color1Name,
+      color2Name,
       expectedContrastRatio,
     );
 
-    // APCAコントラストチェックは行わない
     if (
-      expectedContrastRatio &&
-      result.wcagContrastRatio < expectedContrastRatio
+      expectedContrastRatio == undefined ||
+      contrastRatio < expectedContrastRatio
     ) {
       results.push(result);
     }
   }
 
-  const standardChecks = [
+  const colorPairs = [
     { color1: "primary", color2: "onPrimary", type: "text", expected: 4.5 },
     {
       color1: "primaryContainer",
@@ -480,16 +448,11 @@ export function evaluateContrastAndGenerateResults(
       expected: 4.5,
     },
     { color1: "outline", color2: "background", type: "ui", expected: 3 },
-    {
-      color1: "outlineVariant",
-      color2: "surface",
-      type: "structure",
-      expected: 1.5,
-    },
+    { color1: "outlineVariant", color2: "surface", type: "ui", expected: 1.5 },
   ];
 
-  standardChecks.forEach((check) => {
-    checkContrast(check.color1, check.color2, check.type, check.expected);
+  colorPairs.forEach((pair) => {
+    checkContrast(pair.color1, pair.color2, pair.type, pair.expected);
   });
 
   ["primary", "secondary", "tertiary", "error"].forEach((color) => {
@@ -516,10 +479,10 @@ export function evaluateContrastAndGenerateResults(
   });
 
   return results;
-}
+};
 
-// consoleに結果を出力
-export function printContrastResults(results: ContrastCheckResult[]): void {
+// 評価結果をコンソールに出力する関数
+export const printContrastResults = (results: ContrastCheckResult[]): void => {
   if (results.length === 0) {
     console.log("All color checks passed.");
     return;
@@ -529,15 +492,19 @@ export function printContrastResults(results: ContrastCheckResult[]): void {
   results.forEach((result) => {
     console.warn(`
       Name: ${result.color1Name} vs ${result.color2Name}
-      Colors: ${hexFromOklch(result.color1)} vs ${hexFromOklch(result.color2)}
+      Colors: ${css(result.color1)} vs ${css(result.color2)}
       Check Type: ${result.checkType}
-      WCAG Contrast Ratio: ${result.wcagContrastRatio.toFixed(2)}:1
-      APCA Contrast Value: ${result.apcaContrastValue.toFixed(2)}
+      Contrast Ratio: ${result.wcagContrastRatio.toFixed(2)}:1
+      ${
+        result.expectedContrastRatio
+          ? `Expected Contrast Ratio: ${result.expectedContrastRatio.toFixed(
+              2,
+            )}:1`
+          : ""
+      }
       WCAG Evaluation: ${result.wcagEvaluation}
-      APCA Evaluation: ${result.apcaEvaluation}
       Functional Check: ${result.functionalCheck}
       Design Check: ${result.designCheck}
-      ${result.expectedContrastRatio ? `Expected Contrast Ratio: ${result.expectedContrastRatio.toFixed(2)}:1` : ''}
       --------------------------`);
   });
-}
+};

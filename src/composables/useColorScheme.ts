@@ -1,8 +1,7 @@
-import Color from "colorjs.io";
+import { Color } from "@thi.ng/color";
 import { computed } from "vue";
 import { useStore } from "@/store";
-import { ColorSchemeConfig, ColorScheme, OKLCHCoords } from "@/type/preload";
-import { hexFromOklch } from "@/helpers/colors";
+import { ColorSchemeConfig, ColorScheme } from "@/type/preload";
 
 export function useColorScheme() {
   const store = useStore();
@@ -37,10 +36,11 @@ export function useColorScheme() {
 
   const resetColorScheme = () => store.dispatch("INITIALIZE_COLOR_SCHEME");
 
+  /*
   const getCssVariables = (): Record<string, string> => {
     const variables: Record<string, string> = {};
-    const setVariable = (prefix: string, key: string, value: OKLCHCoords) => {
-      variables[`--${prefix}-${key}`] = hexFromOklch(value);
+    const setVariable = (prefix: string, key: string, value: Color) => {
+      variables[`--${prefix}-${key}`] = value.toString({ format: "hex" });
       variables[`--${prefix}-${key}-oklch`] =
         `oklch(${(value[0], value[1], value[2])})`;
     };
@@ -56,16 +56,18 @@ export function useColorScheme() {
     );
 
     return variables;
-  };
+  }; */
 
+  /*
   const applyColorSchemeToBody = () => {
     const cssVariables = getCssVariables();
     Object.entries(cssVariables).forEach(([key, value]) => {
       document.body.style.setProperty(key, value);
     });
-  };
+  }; */
 
   // NOTE: 以下とりあえず
+  /*
   const getColorOklchCoords = (colorName: string): OKLCHCoords => {
     return (
       currentColorScheme.value.roles[colorName] ||
@@ -91,7 +93,7 @@ export function useColorScheme() {
       `oklch(${oklchCoords[0]} ${oklchCoords[1]} ${oklchCoords[2]})`,
     );
     return color.toString({ format: "hex" });
-  };
+  }; */
 
   return {
     currentColorScheme,
@@ -100,10 +102,10 @@ export function useColorScheme() {
     updateColorScheme,
     selectColorScheme,
     resetColorScheme,
-    getCssVariables,
-    applyColorSchemeToBody,
-    getColorOklchCoords,
-    getColorRgb,
-    getColorHex,
+    //getCssVariables,
+    //applyColorSchemeToBody,
+    //getColorOklchCoords,
+    //getColorRgb,
+    //getColorHex,
   };
 }

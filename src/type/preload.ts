@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Color } from "@thi.ng/color";
 import { IpcSOData } from "./ipc";
 import { AltPortInfos } from "@/store/type";
 import { Result } from "@/type/result";
@@ -563,15 +564,13 @@ export type ColorSchemeSetting = {
   availableColorSchemeConfigs: ColorSchemeConfig[];
 };
 
-export type OKLCHCoords = [number, number, number];
-
 export interface ColorSchemeBaseColors {
-  primary: OKLCHCoords;
-  secondary: OKLCHCoords;
-  tertiary: OKLCHCoords;
-  neutral: OKLCHCoords;
-  neutralVariant: OKLCHCoords;
-  error: OKLCHCoords;
+  primary: string;
+  secondary?: string;
+  tertiary?: string;
+  neutral?: string;
+  neutralVariant?: string;
+  error?: string;
 }
 
 export interface CustomColorConfig {
@@ -594,9 +593,9 @@ export interface ColorSchemeConfig {
 
 export interface ColorScheme {
   config: ColorSchemeConfig;
-  palette: Record<string, OKLCHCoords>;
-  roles: Record<string, OKLCHCoords>;
-  customColors: Record<string, OKLCHCoords>;
+  palette: Record<string, Color>;
+  roles: Record<string, Color>;
+  customColors: Record<string, Color>;
 }
 
 export type ColorRoleDefinition = [

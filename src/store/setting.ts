@@ -5,6 +5,8 @@ import { createDotNotationPartialStore as createPartialStore } from "./vuex";
 import {
   generateColorScheme,
   cssVariablesFromColorScheme,
+  // evaluateContrastAndGenerateResults,
+  // printContrastResults,
 } from "@/helpers/colors";
 import {
   HotkeySettingType,
@@ -315,12 +317,8 @@ export const settingStore = createPartialStore<SettingStoreTypes>({
           name: "Default",
           displayName: "デフォルト",
           baseColors: {
-            primary: [85, 0.115, 149.64],
-            secondary: [82.62, 0.05, 149.64],
-            tertiary: [75, 0.18, 60],
-            neutral: [50, 0, 149.64],
-            neutralVariant: [50, 0.01, 149.64],
-            error: [59.21, 0.17, 17.843],
+            primary: "oklch(86.24 0.115 149.64)",
+            error: "oklch(59.21 0.17 17.843)",
           },
           isDark: false,
           customColors: [
@@ -450,7 +448,7 @@ export const settingStore = createPartialStore<SettingStoreTypes>({
               displayName: "singNoteBarContainer",
               palette: "secondary",
               lightLightness: 90,
-              darkLightness: 80,
+              darkLightness: 70,
               blend: true,
               contrastVs: {
                 singGridCellBlack: 1.2,
@@ -485,6 +483,13 @@ export const settingStore = createPartialStore<SettingStoreTypes>({
         Object.entries(cssVariables).forEach(([key, value]) => {
           document.documentElement.style.setProperty(key, value);
         });
+
+        /*
+        const contrastResults = evaluateContrastAndGenerateResults(
+          currentColorScheme,
+          defaultConfigTest,
+        );
+        printContrastResults(contrastResults); */
       } catch (error) {
         logger.error(`Error initializing color scheme: ${error}`);
         throw error;

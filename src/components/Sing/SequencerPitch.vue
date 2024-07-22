@@ -6,7 +6,7 @@
 import { ref, watch, computed } from "vue";
 import * as PIXI from "pixi.js";
 import AsyncLock from "async-lock";
-import { useColorScheme } from "@/composables/useColorScheme";
+//import { useColorScheme } from "@/composables/useColorScheme";
 import { useStore } from "@/store";
 import {
   UNVOICED_PHONEMES,
@@ -57,11 +57,11 @@ const pitchEditData = computed(() => {
 const previewPitchEdit = computed(() => props.previewPitchEdit);
 const editFrameRate = computed(() => store.state.editFrameRate);
 
-const { getColorRgb } = useColorScheme();
+// const { getColorRgb } = useColorScheme();
 
 // TODO: このままだとテーマ変更で更新されないため、変更に追随する必要あり
-const pitchLineColor = [...getColorRgb("surfaceDim"), 255];
-const pitchEditLineColor = [...getColorRgb("primaryFixed"), 255];
+const pitchLineColor = [255, 255, 255, 255];
+const pitchEditLineColor = [255, 255, 255, 255];
 const originalPitchLine: PitchLine = {
   color: new Color(
     pitchLineColor[0],
