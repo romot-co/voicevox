@@ -310,6 +310,17 @@ export const migrateProjectFileObject = async (
       projectData.talk.audioItems[audioItemsKey].query.pauseLengthScale = 1;
     }
   }
+  // FIXME: 0.22.0 のマイグレーション(おそらく)
+  // よく把握できていないため保留
+  //if (semver.satisfies(projectAppVersion, "<0.22.0", semverSatisfiesOptions)) {
+  if (!("loop" in projectData.song)) {
+    projectData.song.loop = {
+      startTick: 0,
+      endTick: 0,
+      isLoopEnabled: false,
+    };
+  }
+  //}
 
   // Validation check
   // トークはvalidateTalkProjectで検証する

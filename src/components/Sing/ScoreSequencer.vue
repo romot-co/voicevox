@@ -1897,7 +1897,7 @@ const contextMenuData = computed<ContextMenuItemData[]>(() => {
 .score-sequencer {
   backface-visibility: hidden;
   display: grid;
-  grid-template-rows: 40px 1fr;
+  grid-template-rows: 48px 1fr;
   grid-template-columns: 48px 1fr;
   position: relative;
 }

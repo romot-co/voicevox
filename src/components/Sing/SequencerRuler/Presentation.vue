@@ -54,7 +54,7 @@
         :key="measureInfo.number"
         :x1="measureInfo.x - offset"
         :x2="measureInfo.x - offset"
-        y1="20"
+        y1="28"
         :y2="height"
         class="sequencer-ruler-measure-line"
         :class="{ 'first-measure-line': measureInfo.number === 1 }"
@@ -92,8 +92,39 @@
         />
       </template>
     </svg>
-
+    <!-- ループコントロール -->
+    <SequencerLoopControl ref="loopControl" :width :height :offset />
+    <!-- ループエリア外を暗くする -->
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      :width
+      :height
+      shape-rendering="crispEdges"
+      class="sequencer-ruler-loop-mask-container"
+    >
+      <g v-if="isLoopEnabled && loopStartTick !== loopEndTick">
+        <!-- 左側 -->
+        <rect
+          x="0"
+          y="0"
+          :width="Math.max(0, loopStartX - offset)"
+          :height
+          class="sequencer-ruler-loop-mask"
+          pointer-events="none"
+        />
+        <!-- 右側 -->
+        <rect
+          :x="Math.max(0, loopEndX - offset)"
+          y="0"
+          :width="Math.max(0, width - (loopEndX - offset))"
+          :height
+          class="sequencer-ruler-loop-mask"
+          pointer-events="none"
+        />
+      </g>
+    </svg>
     <div class="sequencer-ruler-border-bottom"></div>
+    <!-- 再生ヘッド -->
     <div
       class="sequencer-ruler-playhead"
       :style="{
@@ -132,6 +163,7 @@ import TimeSignatureChangeDialog from "@/components/Sing/ChangeValueDialog/TimeS
 import { FontSpecification, predictTextWidth } from "@/helpers/textWidth";
 import { createLogger } from "@/domain/frontend/log";
 import { useSequencerGrid } from "@/composables/useSequencerGridPattern";
+import SequencerLoopControl from "@/components/Sing/SequencerLoopControl.vue";
 
 const props = defineProps<{
   offset: number;
@@ -142,6 +174,9 @@ const props = defineProps<{
   sequencerZoomX: number;
   uiLocked: boolean;
   sequencerSnapType: number;
+  isLoopEnabled: boolean;
+  loopStartTick: number;
+  loopEndTick: number;
 }>();
 const playheadTicks = defineModel<number>("playheadTicks", {
   required: true,
@@ -156,7 +191,7 @@ const emit = defineEmits<{
 
 const log = createLogger("SequencerRuler");
 
-const height = ref(40);
+const height = ref(56);
 const tsPositions = computed(() => {
   return getTimeSignaturePositions(props.timeSignatures, props.tpqn);
 });
@@ -218,6 +253,14 @@ const getSnappedTickFromOffsetX = (offsetX: number) => {
   const baseX = (props.offset + offsetX) / props.sequencerZoomX;
   return snapTicksToGrid(baseXToTick(baseX, props.tpqn), snapTicks.value);
 };
+
+// ループのX座標を計算
+const loopStartX = computed(() => {
+  return tickToBaseX(props.loopStartTick, props.tpqn) * props.sequencerZoomX;
+});
+const loopEndX = computed(() => {
+  return tickToBaseX(props.loopEndTick, props.tpqn) * props.sequencerZoomX;
+});
 
 const onClick = (event: MouseEvent) => {
   emit("deselectAllNotes");
@@ -502,7 +545,7 @@ const contextMenuData = computed<ContextMenuItemData[]>(() => {
 
 .sequencer-ruler {
   background: var(--scheme-color-sing-ruler-surface);
-  height: 40px;
+  height: 56px;
   position: relative;
   overflow: hidden;
 }
@@ -559,5 +602,33 @@ const contextMenuData = computed<ContextMenuItemData[]>(() => {
   backface-visibility: hidden;
   stroke: var(--scheme-color-sing-ruler-beat-line);
   stroke-width: 1px;
+}
+
+.sequencer-ruler-border-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background-color: var(--scheme-color-sing-ruler-border);
+}
+
+.sequencer-ruler-loop-mask-container {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+.sequencer-ruler-loop-mask {
+  fill: var(--scheme-color-scrim);
+}
+
+:root[is-dark-theme="false"] .sequencer-ruler-loop-mask {
+  opacity: 0.08;
+}
+
+:root[is-dark-theme="true"] .sequencer-ruler-loop-mask {
+  opacity: 0.24;
 }
 </style>

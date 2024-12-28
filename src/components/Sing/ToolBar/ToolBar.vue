@@ -114,6 +114,15 @@
         @click="stop"
       />
       <PlayheadPositionDisplay class="sing-playhead-position" />
+      <QBtn
+        flat
+        round
+        dense
+        :class="['sing-playback-loop', { 'loop-enabled': isLoopEnabled }]"
+        :active="isLoopEnabled"
+        icon="repeat"
+        @click="toggleLoop"
+      />
     </div>
     <!-- settings for edit controls -->
     <div class="sing-controls">
@@ -163,6 +172,7 @@ import { computed, watch, ref } from "vue";
 import PlayheadPositionDisplay from "../PlayheadPositionDisplay.vue";
 import EditTargetSwicher from "./EditTargetSwicher.vue";
 import { useStore } from "@/store";
+import { useLoopControl } from "@/composables/useLoopControl";
 
 import {
   BEAT_TYPES,
@@ -179,6 +189,7 @@ import CharacterMenuButton from "@/components/Sing/CharacterMenuButton/MenuButto
 import { useHotkeyManager } from "@/plugins/hotkeyPlugin";
 import { SequencerEditTarget } from "@/store/type";
 import { UnreachableError } from "@/type/utility";
+import { getNoteDuration } from "@/sing/domain";
 
 const store = useStore();
 
@@ -410,6 +421,36 @@ const stop = () => {
 
 const goToZero = () => {
   void store.actions.SET_PLAYHEAD_POSITION({ position: 0 });
+};
+
+const {
+  isLoopEnabled,
+  setLoopEnabled,
+  setLoopRange,
+  loopStartTick,
+  loopEndTick,
+} = useLoopControl();
+
+const toggleLoop = async () => {
+  // ループが存在しない場合は見える範囲の1小節でループを作成
+  if (loopStartTick.value === loopEndTick.value) {
+    const sequencerBodyElement = document.querySelector(".sequencer-body");
+    if (!sequencerBodyElement) return;
+    const currentPosition = store.getters.PLAYHEAD_POSITION;
+    const timeSignature = store.state.timeSignatures[0];
+    const oneMeasureTicks =
+      getNoteDuration(timeSignature.beatType, store.state.tpqn) *
+      timeSignature.beats;
+    const measureNumber = Math.floor(currentPosition / oneMeasureTicks);
+    const startTick = measureNumber * oneMeasureTicks;
+    const endTick = startTick + oneMeasureTicks;
+
+    await setLoopRange(startTick, endTick);
+    await setLoopEnabled(true);
+  } else {
+    // すでにループが存在する場合は単純に有効/無効を切り替え
+    await setLoopEnabled(!isLoopEnabled.value);
+  }
 };
 
 const volume = computed({
@@ -685,6 +726,19 @@ const snapTypeSelectModel = computed({
 
   &.sing-playback-stop .q-btn__wrapper .q-icon {
     transform: translateX(-0.5px);
+  }
+}
+
+.sing-playback-loop {
+  margin-left: 6px;
+  &.q-btn--active,
+  &.loop-enabled {
+    color: var(--scheme-color-on-secondary-container);
+    background: var(--scheme-color-secondary-container);
+  }
+
+  :deep(.q-icon) {
+    font-size: 18px;
   }
 }
 

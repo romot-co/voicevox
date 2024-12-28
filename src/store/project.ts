@@ -59,7 +59,8 @@ const applySongProjectToStore = async (
   actions: DotNotationDispatch<AllActions>,
   songProject: LatestProjectType["song"],
 ) => {
-  const { tpqn, tempos, timeSignatures, tracks, trackOrder } = songProject;
+  const { tpqn, tempos, timeSignatures, tracks, trackOrder, loop } =
+    songProject;
 
   await actions.SET_TPQN({ tpqn });
   await actions.SET_TEMPOS({ tempos });
@@ -72,6 +73,11 @@ const applySongProjectToStore = async (
         return [trackId, track];
       }),
     ),
+  });
+  await actions.SET_LOOP_ENABLED({ isLoopEnabled: loop.isLoopEnabled });
+  await actions.SET_LOOP_RANGE({
+    loopStartTick: loop.startTick,
+    loopEndTick: loop.endTick,
   });
 };
 
@@ -148,6 +154,7 @@ export const projectStore = createPartialStore<ProjectStoreTypes>({
       if (characterInfos == undefined)
         throw new Error("characterInfos == undefined");
 
+      console.log(migrateProjectFileObject);
       const parsedProjectData = await migrateProjectFileObject(projectData, {
         fetchMoraData: (payload) => actions.FETCH_MORA_DATA(payload),
         voices: characterInfos.flatMap((characterInfo) =>
@@ -289,6 +296,9 @@ export const projectStore = createPartialStore<ProjectStoreTypes>({
             timeSignatures,
             tracks,
             trackOrder,
+            isLoopEnabled,
+            loopStartTick,
+            loopEndTick,
           } = context.state;
           const projectData: LatestProjectType = {
             appVersion: appInfos.version,
@@ -302,6 +312,11 @@ export const projectStore = createPartialStore<ProjectStoreTypes>({
               timeSignatures,
               tracks: Object.fromEntries(tracks),
               trackOrder,
+              loop: {
+                isLoopEnabled,
+                startTick: loopStartTick,
+                endTick: loopEndTick,
+              },
             },
           };
 

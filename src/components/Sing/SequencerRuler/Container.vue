@@ -9,6 +9,9 @@
     :uiLocked
     :playheadTicks
     :sequencerSnapType
+    :isLoopEnabled
+    :loopStartTick
+    :loopEndTick
     @update:playheadTicks="updatePlayheadTicks"
     @removeTempo="removeTempo"
     @removeTimeSignature="removeTimeSignature"
@@ -24,6 +27,7 @@ import Presentation from "./Presentation.vue";
 import { useStore } from "@/store";
 import { Tempo, TimeSignature } from "@/store/type";
 
+import { useLoopControl } from "@/composables/useLoopControl";
 defineOptions({
   name: "SequencerRuler",
 });
@@ -49,6 +53,7 @@ const uiLocked = computed(() => store.getters.UI_LOCKED);
 const sequencerSnapType = computed(() => store.state.sequencerSnapType);
 
 const playheadTicks = computed(() => store.getters.PLAYHEAD_POSITION);
+const { isLoopEnabled, loopStartTick, loopEndTick } = useLoopControl();
 
 const updatePlayheadTicks = (ticks: number) => {
   void store.actions.SET_PLAYHEAD_POSITION({ position: ticks });
