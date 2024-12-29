@@ -11,119 +11,19 @@
       :menudata="contextMenuData"
       :uiLocked
     />
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      :width
-      :height
-      shape-rendering="crispEdges"
-    >
-      <defs>
-        <pattern
-          v-for="(gridPattern, patternIndex) in gridPatterns"
-          :id="`sequencer-ruler-measure-${patternIndex}`"
-          :key="`pattern-${patternIndex}`"
-          patternUnits="userSpaceOnUse"
-          :x="-offset + gridPattern.x"
-          :width="gridPattern.patternWidth"
-          :height
-        >
-          <!-- 拍線（小節の最初を除く） -->
-          <line
-            v-for="n in gridPattern.beatsPerMeasure"
-            :key="n"
-            :x1="gridPattern.beatWidth * n"
-            :x2="gridPattern.beatWidth * n"
-            y1="28"
-            :y2="height"
-            class="sequencer-ruler-beat-line"
-          />
-        </pattern>
-      </defs>
-      <rect
-        v-for="(gridPattern, index) in gridPatterns"
-        :key="`grid-${index}`"
-        :x="0.5 + gridPattern.x - offset"
-        y="0"
-        :height
-        :width="gridPattern.width"
-        :fill="`url(#sequencer-ruler-measure-${index})`"
+    <div class="sequencer-ruler-lanes">
+      <div class="sequencer-ruler-upper-lanes">
+        <GridLane :width :offset :gridPatterns :measureInfos />
+        <LoopLane :width :offset />
+      </div>
+      <ValueChangesLane
+        :width
+        :offset
+        :valueChanges
+        :valueChangeTextPadding
+        @valueChangeClick="onValueChangeClick"
       />
-      <!-- 小節線 -->
-      <line
-        v-for="measureInfo in measureInfos"
-        :key="measureInfo.number"
-        :x1="measureInfo.x - offset"
-        :x2="measureInfo.x - offset"
-        y1="28"
-        :y2="height"
-        class="sequencer-ruler-measure-line"
-        :class="{ 'first-measure-line': measureInfo.number === 1 }"
-      />
-      <!-- 小節番号 -->
-      <text
-        v-for="measureInfo in measureInfos"
-        :key="measureInfo.number"
-        font-size="12"
-        :x="measureInfo.x - offset + valueChangeTextPadding"
-        y="34"
-        class="sequencer-ruler-measure-number"
-      >
-        {{ measureInfo.number }}
-      </text>
-      <!-- テンポ・拍子表示 -->
-      <template v-for="valueChange in valueChanges" :key="valueChange.position">
-        <text
-          ref="valueChangeText"
-          font-size="12"
-          :x="valueChange.x - offset + valueChangeTextPadding"
-          y="16"
-          class="sequencer-ruler-value-change"
-          @click.stop="onValueChangeClick($event, valueChange)"
-          @contextmenu.stop="onValueChangeClick($event, valueChange)"
-        >
-          {{ valueChange.displayText }}
-        </text>
-        <line
-          :x1="valueChange.x - offset"
-          :x2="valueChange.x - offset"
-          y1="0"
-          :y2="height"
-          class="sequencer-ruler-value-change-line"
-        />
-      </template>
-    </svg>
-    <!-- ループコントロール -->
-    <SequencerLoopControl ref="loopControl" :width :height :offset />
-    <!-- ループエリア外を暗くする -->
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      :width
-      :height
-      shape-rendering="crispEdges"
-      class="sequencer-ruler-loop-mask-container"
-    >
-      <g v-if="isLoopEnabled && loopStartTick !== loopEndTick">
-        <!-- 左側 -->
-        <rect
-          x="0"
-          y="0"
-          :width="Math.max(0, loopStartX - offset)"
-          :height
-          class="sequencer-ruler-loop-mask"
-          pointer-events="none"
-        />
-        <!-- 右側 -->
-        <rect
-          :x="Math.max(0, loopEndX - offset)"
-          y="0"
-          :width="Math.max(0, width - (loopEndX - offset))"
-          :height
-          class="sequencer-ruler-loop-mask"
-          pointer-events="none"
-        />
-      </g>
-    </svg>
-    <div class="sequencer-ruler-border-bottom"></div>
+    </div>
     <!-- 再生ヘッド -->
     <div
       class="sequencer-ruler-playhead"
@@ -142,12 +42,13 @@ import {
   onUnmounted,
   ComponentPublicInstance,
   useTemplateRef,
-  toRef,
 } from "vue";
 import { Dialog } from "quasar";
+import GridLane from "./GridLane.vue";
+import LoopLane from "./LoopLane.vue";
+import ValueChangesLane from "./ValueChangesLane.vue";
 import {
   getMeasureDuration,
-  getNoteDuration,
   getTimeSignaturePositions,
   snapTicksToGrid,
   tickToMeasureNumber,
@@ -157,13 +58,10 @@ import { Tempo, TimeSignature } from "@/store/type";
 import ContextMenu, {
   ContextMenuItemData,
 } from "@/components/Menu/ContextMenu/Presentation.vue";
-import { UnreachableError } from "@/type/utility";
 import TempoChangeDialog from "@/components/Sing/ChangeValueDialog/TempoChangeDialog.vue";
 import TimeSignatureChangeDialog from "@/components/Sing/ChangeValueDialog/TimeSignatureChangeDialog.vue";
-import { FontSpecification, predictTextWidth } from "@/helpers/textWidth";
 import { createLogger } from "@/domain/frontend/log";
 import { useSequencerGrid } from "@/composables/useSequencerGridPattern";
-import SequencerLoopControl from "@/components/Sing/SequencerLoopControl.vue";
 
 const props = defineProps<{
   offset: number;
@@ -174,13 +72,12 @@ const props = defineProps<{
   sequencerZoomX: number;
   uiLocked: boolean;
   sequencerSnapType: number;
-  isLoopEnabled: boolean;
-  loopStartTick: number;
-  loopEndTick: number;
 }>();
+
 const playheadTicks = defineModel<number>("playheadTicks", {
   required: true,
 });
+
 const emit = defineEmits<{
   deselectAllNotes: [];
   setTempo: [tempo: Tempo];
@@ -191,10 +88,15 @@ const emit = defineEmits<{
 
 const log = createLogger("SequencerRuler");
 
-const height = ref(56);
+const height = ref(80);
+const width = computed(() => {
+  return tickToBaseX(endTicks.value, props.tpqn) * props.sequencerZoomX;
+});
+
 const tsPositions = computed(() => {
   return getTimeSignaturePositions(props.timeSignatures, props.tpqn);
 });
+
 const endTicks = computed(() => {
   const lastTs = props.timeSignatures[props.timeSignatures.length - 1];
   const lastTsPosition = tsPositions.value[tsPositions.value.length - 1];
@@ -204,14 +106,12 @@ const endTicks = computed(() => {
       (props.numMeasures - lastTs.measureNumber + 1)
   );
 });
-const width = computed(() => {
-  return tickToBaseX(endTicks.value, props.tpqn) * props.sequencerZoomX;
-});
+
 const gridPatterns = useSequencerGrid({
-  timeSignatures: toRef(() => props.timeSignatures),
-  tpqn: toRef(() => props.tpqn),
-  sequencerZoomX: toRef(() => props.sequencerZoomX),
-  numMeasures: toRef(() => props.numMeasures),
+  timeSignatures: computed(() => props.timeSignatures),
+  tpqn: computed(() => props.tpqn),
+  sequencerZoomX: computed(() => props.sequencerZoomX),
+  numMeasures: computed(() => props.numMeasures),
 });
 
 const measureInfos = computed(() => {
@@ -246,21 +146,13 @@ const playheadX = computed(() => {
 });
 
 const snapTicks = computed(() => {
-  return getNoteDuration(props.sequencerSnapType, props.tpqn);
+  return getMeasureDuration(1, props.sequencerSnapType, props.tpqn);
 });
 
 const getSnappedTickFromOffsetX = (offsetX: number) => {
   const baseX = (props.offset + offsetX) / props.sequencerZoomX;
   return snapTicksToGrid(baseXToTick(baseX, props.tpqn), snapTicks.value);
 };
-
-// ループのX座標を計算
-const loopStartX = computed(() => {
-  return tickToBaseX(props.loopStartTick, props.tpqn) * props.sequencerZoomX;
-});
-const loopEndX = computed(() => {
-  return tickToBaseX(props.loopEndTick, props.tpqn) * props.sequencerZoomX;
-});
 
 const onClick = (event: MouseEvent) => {
   emit("deselectAllNotes");
@@ -302,53 +194,18 @@ onUnmounted(() => {
 const contextMenu = ref<ComponentPublicInstance<typeof ContextMenu> | null>(
   null,
 );
+
 const onContextMenu = async (event: MouseEvent) => {
   emit("deselectAllNotes");
 
   const snappedTicks = getSnappedTickFromOffsetX(event.offsetX);
   playheadTicks.value = snappedTicks;
-};
-
-type ValueChange = {
-  position: number;
-  text: string;
-  tempoChange: Tempo | undefined;
-  timeSignatureChange: TimeSignature | undefined;
-  x: number;
-  displayText: string;
-};
-
-const onValueChangeClick = async (
-  event: MouseEvent,
-  valueChange: ValueChange,
-) => {
-  const ticks = valueChange.position;
-  playheadTicks.value = ticks;
   contextMenu.value?.show(event);
 };
 
-const currentMeasure = computed(() =>
-  tickToMeasureNumber(playheadTicks.value, props.timeSignatures, props.tpqn),
-);
-
 const valueChangeTextPadding = 4;
 
-// NOTE: フォントの変更に対応していないが、基本的にフォントが変更されることは少ないので、
-// 複雑性を下げるためにも対応しない
-const valueChangeText = useTemplateRef<SVGTextElement[]>("valueChangeText");
-const valueChangeTextStyle = computed<FontSpecification | null>(() => {
-  if (!valueChangeText.value || valueChangeText.value.length === 0) {
-    return null;
-  }
-  const style = window.getComputedStyle(valueChangeText.value[0]);
-  return {
-    fontFamily: style.fontFamily,
-    fontSize: parseFloat(style.fontSize),
-    fontWeight: style.fontWeight,
-  };
-});
-
-const valueChanges = computed<ValueChange[]>(() => {
+const valueChanges = computed(() => {
   const timeSignaturesWithTicks = tsPositions.value.map((tsPosition, i) => ({
     type: "timeSignature" as const,
     position: tsPosition,
@@ -362,7 +219,7 @@ const valueChanges = computed<ValueChange[]>(() => {
     };
   });
 
-  const valueChanges: ValueChange[] = [
+  return [
     ...Map.groupBy(
       [...tempos, ...timeSignaturesWithTicks],
       (item) => item.position,
@@ -384,66 +241,40 @@ const valueChanges = computed<ValueChange[]>(() => {
 
       return {
         position: tick,
-        text,
-        tempoChange: tempo,
-        timeSignatureChange: timeSignature,
         x: tickToBaseX(tick, props.tpqn) * props.sequencerZoomX,
         displayText: text,
       };
     });
-
-  if (valueChangeTextStyle.value != undefined) {
-    // NOTE: テキストの幅を計算して、表示できるかどうかを判定する
-    //   full: 通常表示（120 4/4）
-    //   ellipsis: fullが入りきらないときに表示する（...）
-    //   hidden: ellipsisも入りきらないときに表示する
-
-    const collapsedTextWidth =
-      predictTextWidth("...", valueChangeTextStyle.value) +
-      valueChangeTextPadding * 2;
-    for (const [i, valueChange] of valueChanges.entries()) {
-      const next = valueChanges.at(i + 1);
-      if (!next) {
-        continue;
-      }
-      const requiredWidth =
-        predictTextWidth(valueChange.text, valueChangeTextStyle.value) +
-        valueChangeTextPadding;
-      const width = next.x - valueChange.x;
-      if (collapsedTextWidth > width) {
-        valueChange.displayText = "";
-      } else if (requiredWidth > width) {
-        valueChange.displayText = "...";
-      }
-    }
-  } else {
-    log.warn("valueChangeTextElement is null. Cannot calculate text width.");
-  }
-
-  return valueChanges;
 });
+
+const currentMeasure = computed(() =>
+  tickToMeasureNumber(playheadTicks.value, props.timeSignatures, props.tpqn),
+);
 
 const currentTempo = computed(() => {
   const maybeTempo = props.tempos.findLast((tempo) => {
     return tempo.position <= playheadTicks.value;
   });
   if (!maybeTempo) {
-    throw new UnreachableError("assert: At least one tempo exists.");
+    throw new Error("At least one tempo exists.");
   }
   return maybeTempo;
 });
+
 const currentTimeSignature = computed(() => {
   const maybeTimeSignature = props.timeSignatures.findLast((timeSignature) => {
     return timeSignature.measureNumber <= currentMeasure.value;
   });
   if (!maybeTimeSignature) {
-    throw new UnreachableError("assert: At least one time signature exists.");
+    throw new Error("At least one time signature exists.");
   }
   return maybeTimeSignature;
 });
+
 const tempoChangeExists = computed(
   () => currentTempo.value.position === playheadTicks.value,
 );
+
 const timeSignatureChangeExists = computed(
   () => currentTimeSignature.value.measureNumber === currentMeasure.value,
 );
@@ -460,6 +291,8 @@ const contextMenuHeader = computed(() => {
   }
   return texts.join("、");
 });
+
+// FIXME: 各レーンごとにコンテキストメニューを分離
 const contextMenuData = computed<ContextMenuItemData[]>(() => {
   const menuData: ContextMenuItemData[] = [];
   menuData.push({
@@ -489,7 +322,6 @@ const contextMenuData = computed<ContextMenuItemData[]>(() => {
       disabled: currentTempo.value.position === 0,
       onClick: () => {
         emit("removeTempo", playheadTicks.value);
-
         contextMenu.value?.hide();
       },
       disableWhenUiLocked: true,
@@ -529,7 +361,6 @@ const contextMenuData = computed<ContextMenuItemData[]>(() => {
       disabled: currentMeasure.value === 1,
       onClick: () => {
         emit("removeTimeSignature", currentMeasure.value);
-
         contextMenu.value?.hide();
       },
       disableWhenUiLocked: true,
@@ -537,17 +368,36 @@ const contextMenuData = computed<ContextMenuItemData[]>(() => {
   }
   return menuData;
 });
+
+const onValueChangeClick = (
+  event: MouseEvent,
+  valueChange: { position: number },
+) => {
+  playheadTicks.value = valueChange.position;
+  contextMenu.value?.show(event);
+};
 </script>
 
 <style scoped lang="scss">
-@use "@/styles/v2/variables" as vars;
-@use "@/styles/colors" as colors;
-
 .sequencer-ruler {
   background: var(--scheme-color-sing-ruler-surface);
-  height: 56px;
+  height: 80px;
   position: relative;
   overflow: hidden;
+}
+
+.sequencer-ruler-lanes {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.sequencer-ruler-upper-lanes {
+  position: relative;
+  height: 40px;
+  display: flex;
+  flex-direction: column;
 }
 
 .sequencer-ruler-playhead {
@@ -559,76 +409,6 @@ const contextMenuData = computed<ContextMenuItemData[]>(() => {
   background: var(--scheme-color-inverse-surface);
   pointer-events: none;
   will-change: transform;
-  z-index: vars.$z-index-sing-playhead;
-}
-
-.sequencer-ruler-measure-number {
-  font-weight: 700;
-  fill: var(--scheme-color-on-surface-variant);
-}
-.sequencer-ruler-value-change {
-  font-weight: 700;
-  fill: var(--scheme-color-on-surface-variant);
-
-  &:hover {
-    cursor: pointer;
-
-    text-decoration: underline;
-  }
-}
-
-.sequencer-ruler-value-change-line {
-  backface-visibility: hidden;
-  stroke: var(--scheme-color-on-surface-variant);
-  stroke-width: 1px;
-}
-
-.sequencer-ruler-value-change-hitbox {
-  pointer-events: all;
-}
-
-.sequencer-ruler-measure-line {
-  backface-visibility: hidden;
-  stroke: var(--scheme-color-sing-ruler-measure-line);
-  stroke-width: 1px;
-
-  // NOTE: 最初の小節線を非表示。必要に応じて再表示・位置合わせする
-  &.first-measure-line {
-    stroke: var(--scheme-color-sing-ruler-surface);
-  }
-}
-
-.sequencer-ruler-beat-line {
-  backface-visibility: hidden;
-  stroke: var(--scheme-color-sing-ruler-beat-line);
-  stroke-width: 1px;
-}
-
-.sequencer-ruler-border-bottom {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background-color: var(--scheme-color-sing-ruler-border);
-}
-
-.sequencer-ruler-loop-mask-container {
-  position: absolute;
-  top: 0;
-  left: 0;
-  pointer-events: none;
-}
-
-.sequencer-ruler-loop-mask {
-  fill: var(--scheme-color-scrim);
-}
-
-:root[is-dark-theme="false"] .sequencer-ruler-loop-mask {
-  opacity: 0.08;
-}
-
-:root[is-dark-theme="true"] .sequencer-ruler-loop-mask {
-  opacity: 0.24;
+  z-index: 100;
 }
 </style>

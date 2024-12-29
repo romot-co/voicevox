@@ -1,27 +1,24 @@
 <template>
   <div
-    class="sequencer-loop-control"
+    class="sequencer-ruler-loop-lane"
     :class="{
       'is-enabled': isLoopEnabled,
       'is-dragging': isDragging,
       'is-empty': isEmpty,
     }"
-    :style="{ height: adjustedHeight + 'px' }"
-    @click.stop
-    @contextmenu.prevent="onContextMenu"
   >
     <svg
       xmlns="http://www.w3.org/2000/svg"
-      :width="props.width"
-      :height="16"
+      :width
+      :height="40"
       shape-rendering="crispEdges"
     >
-      <!-- 背景エリア -->
+      <!-- ループエリア -->
       <rect
         x="0"
         y="0"
-        :width="props.width"
-        height="16"
+        :width
+        height="40"
         rx="6"
         ry="6"
         class="loop-background"
@@ -30,10 +27,11 @@
       />
       <!-- ループ範囲 -->
       <rect
+        v-if="!isEmpty"
         :x="loopStartX - offset + 4"
         y="4"
         :width="Math.max(loopEndX - loopStartX - 8, 0)"
-        height="8"
+        height="32"
         rx="2"
         ry="2"
         class="loop-range"
@@ -45,7 +43,7 @@
           :x="loopStartX - offset"
           y="0"
           width="2"
-          height="16"
+          height="40"
           rx="1"
           ry="1"
           class="loop-handle loop-handle-start"
@@ -56,7 +54,7 @@
           :x="loopStartX - offset - 2"
           y="0"
           width="8"
-          height="16"
+          height="40"
           class="loop-handle-drag-area"
           @mousedown.stop="onStartHandleMouseDown"
         />
@@ -67,19 +65,41 @@
           :x="loopEndX - offset - 2"
           y="0"
           width="2"
-          height="16"
+          height="40"
           rx="1"
           ry="1"
           class="loop-handle loop-handle-end"
           :class="{ 'is-empty': isEmpty }"
+          @mousedown.stop="onEndHandleMouseDown"
         />
         <rect
           :x="loopEndX - offset - 6"
           y="0"
           width="8"
-          height="16"
+          height="40"
           class="loop-handle-drag-area"
           @mousedown.stop="onEndHandleMouseDown"
+        />
+      </g>
+      <!-- ループ範囲外を暗くする -->
+      <g v-if="isLoopEnabled && !isEmpty">
+        <!-- 左側 -->
+        <rect
+          x="0"
+          y="0"
+          :width="Math.max(0, loopStartX - offset)"
+          height="40"
+          class="sequencer-ruler-loop-mask"
+          pointer-events="none"
+        />
+        <!-- 右側 -->
+        <rect
+          :x="Math.max(0, loopEndX - offset)"
+          y="0"
+          :width="Math.max(0, width - (loopEndX - offset))"
+          height="40"
+          class="sequencer-ruler-loop-mask"
+          pointer-events="none"
         />
       </g>
     </svg>
@@ -91,11 +111,9 @@ import { ref, computed, onUnmounted } from "vue";
 import { useStore } from "@/store";
 import { useLoopControl } from "@/composables/useLoopControl";
 import { tickToBaseX, baseXToTick } from "@/sing/viewHelper";
-import ContextMenu from "@/components/Menu/ContextMenu/Presentation.vue";
 
 const props = defineProps<{
   width: number;
-  height: number;
   offset: number;
 }>();
 
@@ -106,18 +124,10 @@ const {
   loopEndTick,
   setLoopEnabled,
   setLoopRange,
-  clearLoopRange,
+  // clearLoopRange,
   snapToGrid,
-  addOneMeasureLoop,
 } = useLoopControl();
 
-// ドラッグ中のループ高さ
-const DRAGGING_HEIGHT = props.height;
-// ドラッグ中でないループ高さ
-const DEFAULT_HEIGHT = 16;
-
-// FIXME: 計算値をcomposableに移動し、コンポーネントから分離したい
-// 以下のような要素は広使われると思われるためループ実装においてはcomposableに移動しない
 const tpqn = computed(() => store.state.tpqn);
 const sequencerZoomX = computed(() => store.state.sequencerZoomX);
 
@@ -133,98 +143,72 @@ const currentLoopEndTick = computed(() =>
   isDragging.value ? previewLoopEndTick.value : loopEndTick.value,
 );
 
-// ループ開始X座標
-const loopStartX = computed(
-  () =>
+// ループのX座標を計算
+const loopStartX = computed(() =>
+  Math.round(
     tickToBaseX(currentLoopStartTick.value, tpqn.value) * sequencerZoomX.value,
+  ),
 );
-// ループ終了X座標
-const loopEndX = computed(
-  () =>
+const loopEndX = computed(() =>
+  Math.round(
     tickToBaseX(currentLoopEndTick.value, tpqn.value) * sequencerZoomX.value,
+  ),
 );
 
-const offset = computed(() => props.offset);
-
-// ドラッグ関連の状態と処理
-// FIXME: ドラッグ関連の状態と処理をcomposableに移動したい
+// ドラッグ関連の状態
 const isDragging = ref(false);
 const dragTarget = ref<"start" | "end" | null>(null);
 const dragStartX = ref(0);
 const dragStartHandleX = ref(0);
 let lastMouseEvent: MouseEvent | null = null;
 
-// ドラッグエリアの高さ
-const adjustedHeight = computed(() =>
-  isDragging.value ? DRAGGING_HEIGHT : DEFAULT_HEIGHT,
-);
-
 // ループが空かどうか
 const isEmpty = computed(
   () => currentLoopStartTick.value === currentLoopEndTick.value,
 );
 
-// プレビュー中かどうか
+// プレビュー関連
 const executePreviewProcess = ref(false);
-// RequestAnimationFrameのID
 let previewRequestId: number | null = null;
 
-// ループエリアのクリック(新規ループを作成する)
 const onLoopAreaMouseDown = (event: MouseEvent) => {
-  // 左クリック以外は無視
   if (event.button !== 0 || (event.ctrlKey && event.button === 0)) return;
 
-  // プレビューを停止
   executePreviewProcess.value = false;
   if (previewRequestId != null) {
     cancelAnimationFrame(previewRequestId);
     previewRequestId = null;
   }
 
-  // クリック位置の計算
   const target = event.currentTarget as HTMLElement;
   const rect = target.getBoundingClientRect();
   const clickX = event.clientX - rect.left;
   const x = clickX + props.offset;
   const tick = snapToGrid(baseXToTick(x / sequencerZoomX.value, tpqn.value));
-  // プレビュー用のループ範囲を設定
+
   previewLoopStartTick.value = tick;
   previewLoopEndTick.value = tick;
-  // ループ範囲を設定
   void setLoopRange(tick, tick);
-  // ドラッグ開始
+  void setLoopEnabled(true);
   startDragging("end", event);
 };
 
-// ループエリアのクリック(ループの有無を切り替える)
 const onLoopRangeClick = async () => {
   await setLoopEnabled(!isLoopEnabled.value);
 };
 
-const onStartHandleMouseDown = (event: MouseEvent) => {
-  startDragging("start", event);
-};
-
-const onEndHandleMouseDown = (event: MouseEvent) => {
-  startDragging("end", event);
-};
-
-// ドラッグ開始処理
 const startDragging = (target: "start" | "end", event: MouseEvent) => {
-  // 左クリック以外は無視
   if (event.button !== 0) return;
-  // ドラッグ開始
+
   isDragging.value = true;
   dragTarget.value = target;
   dragStartX.value = event.clientX;
   dragStartHandleX.value =
     target === "start" ? loopStartX.value : loopEndX.value;
 
-  // ドラッグ開始時に現行のループ範囲をプレビューにコピー
   previewLoopStartTick.value = loopStartTick.value;
   previewLoopEndTick.value = loopEndTick.value;
 
-  // プレビュー開始
   lastMouseEvent = event;
   executePreviewProcess.value = true;
   if (previewRequestId == null) {
@@ -234,30 +218,22 @@ const startDragging = (target: "start" | "end", event: MouseEvent) => {
   window.addEventListener("mouseup", stopDragging, true);
 };
 
-// マウス移動処理
 const onMouseMove = (event: MouseEvent) => {
   if (!isDragging.value) return;
   lastMouseEvent = event;
   executePreviewProcess.value = true;
 };
 
-// プレビュー処理
 const preview = () => {
   if (executePreviewProcess.value && lastMouseEvent) {
     executePreviewProcess.value = false;
     const event = lastMouseEvent;
-
-    // ドラッグ中のX座標
     const dx = event.clientX - dragStartX.value;
-    // ドラッグ中のハンドル位置
     const newX = dragStartHandleX.value + dx;
-    // ドラッグ中の基準tick
     const baseTick = baseXToTick(newX / sequencerZoomX.value, tpqn.value);
-    // ドラッグ中の新しいtick（スナップされたtick）
     const newTick = Math.max(0, snapToGrid(baseTick));
 
     try {
-      // 開始ハンドルのドラッグ
       if (dragTarget.value === "start") {
         if (newTick <= previewLoopEndTick.value) {
           previewLoopStartTick.value = newTick;
@@ -267,13 +243,9 @@ const preview = () => {
           previewLoopEndTick.value = newTick;
           dragTarget.value = "end";
           dragStartX.value = event.clientX;
-          dragStartHandleX.value =
-            tickToBaseX(previewLoopEndTick.value, tpqn.value) *
-            sequencerZoomX.value;
+          dragStartHandleX.value = newX;
         }
-      }
-      // 終了ハンドルのドラッグ
-      else if (dragTarget.value === "end") {
+      } else if (dragTarget.value === "end") {
         if (newTick >= previewLoopStartTick.value) {
           previewLoopEndTick.value = newTick;
         } else {
@@ -282,9 +254,7 @@ const preview = () => {
           previewLoopStartTick.value = newTick;
           dragTarget.value = "start";
           dragStartX.value = event.clientX;
-          dragStartHandleX.value =
-            tickToBaseX(previewLoopStartTick.value, tpqn.value) *
-            sequencerZoomX.value;
+          dragStartHandleX.value = newX;
         }
       }
     } catch (error) {
@@ -299,9 +269,9 @@ const preview = () => {
   }
 };
 
-// ドラッグ終了処理
 const stopDragging = () => {
   if (!isDragging.value) return;
+
   isDragging.value = false;
   dragTarget.value = null;
   executePreviewProcess.value = false;
@@ -316,99 +286,46 @@ const stopDragging = () => {
   try {
     // ループ範囲を設定
     void setLoopRange(previewLoopStartTick.value, previewLoopEndTick.value);
-    // 再生ヘッドがループ開始位置にあるか
-    const isPlayheadToLoopStart =
-      previewLoopStartTick.value !== previewLoopEndTick.value;
-    if (isPlayheadToLoopStart) {
-      try {
-        void store.dispatch("SET_PLAYHEAD_POSITION", {
-          position: previewLoopStartTick.value,
-        });
-      } catch (error) {
-        throw new Error("Failed to move playhead", { cause: error });
-      }
+    // プレイヘッドをループ開始位置に移動
+    try {
+      void store.dispatch("SET_PLAYHEAD_POSITION", {
+        position: previewLoopStartTick.value,
+      });
+    } catch (error) {
+      throw new Error("Failed to move playhead", { cause: error });
     }
   } catch (error) {
     throw new Error("Failed to set loop range", { cause: error });
   }
 };
 
-// コンキストメニュー位置に1小節のループ範囲を作成する
-const handleAddOneMeasureLoop = (x: number) => {
-  addOneMeasureLoop(x, props.offset, tpqn.value, sequencerZoomX.value);
+const onStartHandleMouseDown = (event: MouseEvent) => {
+  startDragging("start", event);
 };
 
-const onContextMenu = (event: MouseEvent) => {
-  event.preventDefault();
-  event.stopPropagation();
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-  contextMenuPosition.value = event.clientX - rect.left;
+const onEndHandleMouseDown = (event: MouseEvent) => {
+  startDragging("end", event);
 };
-const contextMenu = ref<InstanceType<typeof ContextMenu>>();
-const contextMenuPosition = ref<number | null>(null);
-const contextMenuData = computed(() => {
-  return [
-    {
-      type: "button",
-      label: isLoopEnabled.value ? "ループ無効" : "ループ有効",
-      onClick: () => {
-        contextMenu.value?.hide();
-        void setLoopEnabled(!isLoopEnabled.value);
-      },
-      disableWhenUiLocked: true,
-    },
-    {
-      type: "button",
-      label: "ループ範囲を作成",
-      onClick: () => {
-        contextMenu.value?.hide();
-        if (contextMenuPosition.value != null) {
-          handleAddOneMeasureLoop(contextMenuPosition.value);
-        }
-      },
-      disabled: contextMenuPosition.value == null,
-      disableWhenUiLocked: true,
-    },
-    {
-      type: "button",
-      label: "ループ範囲を削除",
-      onClick: () => {
-        contextMenu.value?.hide();
-        void clearLoopRange();
-      },
-      disabled: isEmpty.value,
-      disableWhenUiLocked: true,
-    },
-  ];
-});
 
 onUnmounted(() => {
   window.removeEventListener("mousemove", onMouseMove, true);
   window.removeEventListener("mouseup", stopDragging, true);
   if (previewRequestId != null) {
     cancelAnimationFrame(previewRequestId);
+    previewRequestId = null;
   }
 });
 </script>
 
 <style scoped lang="scss">
-.sequencer-loop-control {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
+.sequencer-ruler-loop-lane {
+  height: 40px;
+  position: relative;
+  overflow: hidden;
   pointer-events: auto;
   cursor: pointer;
-  z-index: 100;
-
-  &.cursor-ew-resize {
-    cursor: ew-resize;
-  }
-
-  // ホバー時のループエリア
-  &:hover .loop-background {
-    fill: var(--scheme-color-sing-loop-area);
-  }
+  width: 100%;
+  z-index: 1;
 
   &.is-enabled {
     .loop-range {
@@ -425,12 +342,15 @@ onUnmounted(() => {
     }
   }
 
-  &:not(.is-enabled):not(.is-dragging) {
+  &:not(.is-enabled) {
     .loop-range {
+      fill: var(--scheme-color-outline);
       opacity: 0.6;
     }
 
     .loop-handle {
+      fill: var(--scheme-color-outline);
+      stroke: var(--scheme-color-outline);
       opacity: 0.6;
     }
   }
@@ -481,25 +401,29 @@ onUnmounted(() => {
   }
 }
 
-// ループエリア
 .loop-background {
   fill: transparent;
   transition: fill 0.1s ease-out;
+
+  &:hover {
+    fill: var(--scheme-color-sing-loop-area);
+  }
 }
 
-// ループ範囲
 .loop-range {
   fill: var(--scheme-color-outline);
+  pointer-events: auto;
+  cursor: pointer;
 
   &-area {
     fill: transparent;
   }
 }
 
-// ループハンドル
 .loop-handle {
   fill: var(--scheme-color-outline);
   cursor: ew-resize;
+  pointer-events: auto;
 
   &.is-empty {
     fill: var(--scheme-color-outline);
@@ -515,5 +439,19 @@ onUnmounted(() => {
 .loop-handle-drag-area {
   fill: transparent;
   cursor: ew-resize;
+  pointer-events: auto;
+}
+
+.sequencer-ruler-loop-mask {
+  fill: var(--scheme-color-scrim);
+  pointer-events: none;
+}
+
+:root[is-dark-theme="false"] .sequencer-ruler-loop-mask {
+  opacity: 0.08;
+}
+
+:root[is-dark-theme="true"] .sequencer-ruler-loop-mask {
+  opacity: 0.24;
 }
 </style>
