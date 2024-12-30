@@ -3,7 +3,7 @@
     <svg
       xmlns="http://www.w3.org/2000/svg"
       :width
-      :height="40"
+      :height="24"
       shape-rendering="crispEdges"
     >
       <!-- テンポ・拍子表示 -->
@@ -11,7 +11,7 @@
         <text
           font-size="12"
           :x="valueChange.x - offset + valueChangeTextPadding"
-          y="24"
+          y="16"
           class="sequencer-ruler-value-change"
           @click.stop="onValueChangeClick($event, valueChange)"
           @contextmenu.stop="onValueChangeClick($event, valueChange)"
@@ -22,7 +22,7 @@
           :x1="valueChange.x - offset"
           :x2="valueChange.x - offset"
           y1="0"
-          :y2="40"
+          :y2="24"
           class="sequencer-ruler-value-change-line"
         />
       </template>
@@ -55,11 +55,10 @@ const onValueChangeClick = (event: MouseEvent, valueChange: ValueChange) => {
 
 <style scoped lang="scss">
 .sequencer-ruler-value-changes-lane {
-  height: 40px;
+  height: 24px;
   position: relative;
   overflow: hidden;
   background: var(--scheme-color-sing-ruler-surface);
-  border-top: 1px solid var(--scheme-color-sing-ruler-border);
   width: 100%;
   z-index: 1;
 }

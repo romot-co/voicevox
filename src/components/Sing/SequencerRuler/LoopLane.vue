@@ -10,7 +10,7 @@
     <svg
       xmlns="http://www.w3.org/2000/svg"
       :width
-      :height="40"
+      :height="24"
       shape-rendering="crispEdges"
     >
       <!-- ループエリア -->
@@ -18,7 +18,7 @@
         x="0"
         y="0"
         :width
-        height="40"
+        height="24"
         rx="6"
         ry="6"
         class="loop-background"
@@ -29,9 +29,9 @@
       <rect
         v-if="!isEmpty"
         :x="loopStartX - offset + 4"
-        y="4"
+        y="2"
         :width="Math.max(loopEndX - loopStartX - 8, 0)"
-        height="32"
+        height="6"
         rx="2"
         ry="2"
         class="loop-range"
@@ -43,7 +43,7 @@
           :x="loopStartX - offset"
           y="0"
           width="2"
-          height="40"
+          height="24"
           rx="1"
           ry="1"
           class="loop-handle loop-handle-start"
@@ -54,7 +54,7 @@
           :x="loopStartX - offset - 2"
           y="0"
           width="8"
-          height="40"
+          height="24"
           class="loop-handle-drag-area"
           @mousedown.stop="onStartHandleMouseDown"
         />
@@ -65,7 +65,7 @@
           :x="loopEndX - offset - 2"
           y="0"
           width="2"
-          height="40"
+          height="24"
           rx="1"
           ry="1"
           class="loop-handle loop-handle-end"
@@ -76,7 +76,7 @@
           :x="loopEndX - offset - 6"
           y="0"
           width="8"
-          height="40"
+          height="24"
           class="loop-handle-drag-area"
           @mousedown.stop="onEndHandleMouseDown"
         />
@@ -88,7 +88,7 @@
           x="0"
           y="0"
           :width="Math.max(0, loopStartX - offset)"
-          height="40"
+          height="24"
           class="sequencer-ruler-loop-mask"
           pointer-events="none"
         />
@@ -97,7 +97,7 @@
           :x="Math.max(0, loopEndX - offset)"
           y="0"
           :width="Math.max(0, width - (loopEndX - offset))"
-          height="40"
+          height="24"
           class="sequencer-ruler-loop-mask"
           pointer-events="none"
         />
@@ -189,7 +189,6 @@ const onLoopAreaMouseDown = (event: MouseEvent) => {
   previewLoopStartTick.value = tick;
   previewLoopEndTick.value = tick;
   void setLoopRange(tick, tick);
-  void setLoopEnabled(true);
   startDragging("end", event);
 };
 
@@ -286,7 +285,7 @@ const stopDragging = () => {
   try {
     // ループ範囲を設定
     void setLoopRange(previewLoopStartTick.value, previewLoopEndTick.value);
-    // プレイヘッドをループ開始位置に移動
+    // プレイヘッドを必ずループ開始位置に移動
     try {
       void store.dispatch("SET_PLAYHEAD_POSITION", {
         position: previewLoopStartTick.value,
@@ -319,19 +318,20 @@ onUnmounted(() => {
 
 <style scoped lang="scss">
 .sequencer-ruler-loop-lane {
-  height: 40px;
+  height: 24px;
   position: relative;
   overflow: hidden;
   pointer-events: auto;
   cursor: pointer;
   width: 100%;
-  z-index: 1;
+  top: -24px;
+  z-index: 0;
 
   &.is-enabled {
     .loop-range {
       fill: color-mix(
         in oklch,
-        var(--scheme-color-primary-fixed-dim) 40%,
+        var(--scheme-color-primary-fixed-dim) 30%,
         var(--scheme-color-sing-loop-area)
       );
     }
@@ -386,28 +386,11 @@ onUnmounted(() => {
       opacity: 0.38;
     }
   }
-
-  &:not(.is-dragging) {
-    .loop-handle {
-      &:hover,
-      &-start:hover,
-      &-end:hover {
-        fill: var(--scheme-color-primary-fixed);
-        outline: 2px solid
-          oklch(from var(--scheme-color-primary-fixed) l c h / 0.5);
-        outline-offset: 1px;
-      }
-    }
-  }
 }
 
 .loop-background {
   fill: transparent;
   transition: fill 0.1s ease-out;
-
-  &:hover {
-    fill: var(--scheme-color-sing-loop-area);
-  }
 }
 
 .loop-range {

@@ -52,11 +52,6 @@ const playheadPosition = computed({
 /** ループ関連 (store依存のフック) */
 const { isLoopEnabled, loopStartTick, loopEndTick } = useLoopControl();
 
-/**
- * Presentationからのイベントを store のアクションで処理する
- *
- * 例: playheadを移動
- */
 function updatePlayheadTicks(ticks: number) {
   void store.actions.SET_PLAYHEAD_POSITION({ position: ticks });
 }

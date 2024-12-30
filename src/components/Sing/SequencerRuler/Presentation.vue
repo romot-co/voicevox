@@ -88,7 +88,7 @@ const emit = defineEmits<{
 
 const log = createLogger("SequencerRuler");
 
-const height = ref(80);
+const height = ref(48);
 const width = computed(() => {
   return tickToBaseX(endTicks.value, props.tpqn) * props.sequencerZoomX;
 });
@@ -381,7 +381,7 @@ const onValueChangeClick = (
 <style scoped lang="scss">
 .sequencer-ruler {
   background: var(--scheme-color-sing-ruler-surface);
-  height: 80px;
+  height: 48px;
   position: relative;
   overflow: hidden;
 }
@@ -395,9 +395,7 @@ const onValueChangeClick = (
 
 .sequencer-ruler-upper-lanes {
   position: relative;
-  height: 40px;
-  display: flex;
-  flex-direction: column;
+  height: 24px;
 }
 
 .sequencer-ruler-playhead {

@@ -3,7 +3,7 @@
     <svg
       xmlns="http://www.w3.org/2000/svg"
       :width
-      :height="40"
+      :height="24"
       shape-rendering="crispEdges"
     >
       <defs>
@@ -14,7 +14,7 @@
           patternUnits="userSpaceOnUse"
           :x="-offset + gridPattern.x"
           :width="gridPattern.patternWidth"
-          :height="40"
+          :height="24"
         >
           <!-- 拍線（小節の最初を除く） -->
           <line
@@ -23,7 +23,7 @@
             :x1="gridPattern.beatWidth * n"
             :x2="gridPattern.beatWidth * n"
             y1="0"
-            :y2="40"
+            :y2="24"
             class="sequencer-ruler-beat-line"
           />
         </pattern>
@@ -33,7 +33,7 @@
         :key="`grid-${index}`"
         :x="0.5 + gridPattern.x - offset"
         y="0"
-        :height="40"
+        :height="24"
         :width="gridPattern.width"
         :fill="`url(#sequencer-ruler-measure-${index})`"
       />
@@ -44,7 +44,7 @@
         :x1="measureInfo.x - offset"
         :x2="measureInfo.x - offset"
         y1="0"
-        :y2="40"
+        :y2="24"
         class="sequencer-ruler-measure-line"
         :class="{ 'first-measure-line': measureInfo.number === 1 }"
       />
@@ -83,10 +83,12 @@ defineProps<{
 
 <style scoped lang="scss">
 .sequencer-ruler-grid-lane {
-  height: 40px;
+  height: 24px;
   position: relative;
   overflow: hidden;
-  background: var(--scheme-color-sing-ruler-surface);
+  pointer-events: none;
+  background: transparent;
+  z-index: 1;
 }
 
 .sequencer-ruler-measure-number {

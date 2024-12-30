@@ -120,9 +120,10 @@
         dense
         :class="['sing-playback-loop', { 'loop-enabled': isLoopEnabled }]"
         :active="isLoopEnabled"
-        icon="repeat"
         @click="toggleLoop"
-      />
+      >
+        <i class="material-symbols-outlined" style="font-size: 16px">repeat</i>
+      </QBtn>
     </div>
     <!-- settings for edit controls -->
     <div class="sing-controls">
