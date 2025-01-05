@@ -5,7 +5,10 @@
       'is-enabled': isLoopEnabled,
       'is-dragging': isDragging,
       'is-empty': isEmpty,
+      [cursorClass]: true,
     }"
+    @click.stop
+    @contextmenu.prevent="handleContextMenu"
   >
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -22,20 +25,20 @@
         rx="6"
         ry="6"
         class="loop-background"
-        @mousedown.stop="onLoopAreaMouseDown"
+        @mousedown.stop="handleLoopAreaMouseDown"
         @mouseup.stop
       />
       <!-- ループ範囲 -->
       <rect
         v-if="!isEmpty"
         :x="loopStartX - offset + 4"
-        y="2"
+        y="4"
         :width="Math.max(loopEndX - loopStartX - 8, 0)"
-        height="6"
+        height="8"
         rx="2"
         ry="2"
         class="loop-range"
-        @click.stop="onLoopRangeClick"
+        @click.stop="handleLoopRangeClick"
       />
       <!-- ループ開始ハンドル -->
       <g class="loop-handle-group">
@@ -48,7 +51,7 @@
           ry="1"
           class="loop-handle loop-handle-start"
           :class="{ 'is-empty': isEmpty }"
-          @mousedown.stop="onStartHandleMouseDown"
+          @mousedown.stop="handleStartHandleMouseDown"
         />
         <rect
           :x="loopStartX - offset - 2"
@@ -56,7 +59,7 @@
           width="8"
           height="24"
           class="loop-handle-drag-area"
-          @mousedown.stop="onStartHandleMouseDown"
+          @mousedown.stop="handleStartHandleMouseDown"
         />
       </g>
       <!-- ループ終了ハンドル -->
@@ -70,7 +73,7 @@
           ry="1"
           class="loop-handle loop-handle-end"
           :class="{ 'is-empty': isEmpty }"
-          @mousedown.stop="onEndHandleMouseDown"
+          @mousedown.stop="handleEndHandleMouseDown"
         />
         <rect
           :x="loopEndX - offset - 6"
@@ -78,31 +81,11 @@
           width="8"
           height="24"
           class="loop-handle-drag-area"
-          @mousedown.stop="onEndHandleMouseDown"
-        />
-      </g>
-      <!-- ループ範囲外を暗くする -->
-      <g v-if="isLoopEnabled && !isEmpty">
-        <!-- 左側 -->
-        <rect
-          x="0"
-          y="0"
-          :width="Math.max(0, loopStartX - offset)"
-          height="24"
-          class="sequencer-ruler-loop-mask"
-          pointer-events="none"
-        />
-        <!-- 右側 -->
-        <rect
-          :x="Math.max(0, loopEndX - offset)"
-          y="0"
-          :width="Math.max(0, width - (loopEndX - offset))"
-          height="24"
-          class="sequencer-ruler-loop-mask"
-          pointer-events="none"
+          @mousedown.stop="handleEndHandleMouseDown"
         />
       </g>
     </svg>
+    <ContextMenu :menudata="contextMenuData" />
   </div>
 </template>
 
@@ -111,12 +94,29 @@ import { ref, computed, onUnmounted } from "vue";
 import { useStore } from "@/store";
 import { useLoopControl } from "@/composables/useLoopControl";
 import { tickToBaseX, baseXToTick } from "@/sing/viewHelper";
+import ContextMenu, {
+  ContextMenuItemData,
+} from "@/components/Menu/ContextMenu/Presentation.vue";
+import { UnreachableError } from "@/type/utility";
+
+// カーソル状態の管理
+type CursorState = "default" | "ew-resize";
+const cursorState = ref<CursorState>("default");
+const cursorClass = computed(() => {
+  switch (cursorState.value) {
+    case "ew-resize":
+      return "cursor-ew-resize";
+    default:
+      return "";
+  }
+});
 
 const props = defineProps<{
   width: number;
   offset: number;
 }>();
 
+// TODO: Containerに責務を移動
 const store = useStore();
 const {
   isLoopEnabled,
@@ -124,10 +124,12 @@ const {
   loopEndTick,
   setLoopEnabled,
   setLoopRange,
-  // clearLoopRange,
+  clearLoopRange,
   snapToGrid,
+  addOneMeasureLoop,
 } = useLoopControl();
 
+// 基本パラメータ
 const tpqn = computed(() => store.state.tpqn);
 const sequencerZoomX = computed(() => store.state.sequencerZoomX);
 
@@ -171,7 +173,8 @@ const isEmpty = computed(
 const executePreviewProcess = ref(false);
 let previewRequestId: number | null = null;
 
-const onLoopAreaMouseDown = (event: MouseEvent) => {
+// イベントハンドラ
+const handleLoopAreaMouseDown = (event: MouseEvent) => {
   if (event.button !== 0 || (event.ctrlKey && event.button === 0)) return;
 
   executePreviewProcess.value = false;
@@ -192,10 +195,11 @@ const onLoopAreaMouseDown = (event: MouseEvent) => {
   startDragging("end", event);
 };
 
-const onLoopRangeClick = async () => {
+const handleLoopRangeClick = async () => {
   await setLoopEnabled(!isLoopEnabled.value);
 };
 
+// ドラッグ開始処理
 const startDragging = (target: "start" | "end", event: MouseEvent) => {
   if (event.button !== 0) return;
 
@@ -208,31 +212,40 @@ const startDragging = (target: "start" | "end", event: MouseEvent) => {
   previewLoopStartTick.value = loopStartTick.value;
   previewLoopEndTick.value = loopEndTick.value;
 
+  cursorState.value = "ew-resize";
   lastMouseEvent = event;
   executePreviewProcess.value = true;
   if (previewRequestId == null) {
     previewRequestId = requestAnimationFrame(preview);
   }
-  window.addEventListener("mousemove", onMouseMove, true);
+  window.addEventListener("mousemove", handleMouseMove, true);
   window.addEventListener("mouseup", stopDragging, true);
 };
 
-const onMouseMove = (event: MouseEvent) => {
+// マウス移動処理
+const handleMouseMove = (event: MouseEvent) => {
   if (!isDragging.value) return;
   lastMouseEvent = event;
   executePreviewProcess.value = true;
 };
 
+// プレビュー処理
 const preview = () => {
   if (executePreviewProcess.value && lastMouseEvent) {
     executePreviewProcess.value = false;
     const event = lastMouseEvent;
+
+    // ドラッグ中のX座標
     const dx = event.clientX - dragStartX.value;
+    // ドラッグ中のハンドル位置
     const newX = dragStartHandleX.value + dx;
+    // ドラッグ中の基準tick
     const baseTick = baseXToTick(newX / sequencerZoomX.value, tpqn.value);
+    // ドラッグ中の新しいtick（スナップされたtick）
     const newTick = Math.max(0, snapToGrid(baseTick));
 
     try {
+      // 開始ハンドルのドラッグ
       if (dragTarget.value === "start") {
         if (newTick <= previewLoopEndTick.value) {
           previewLoopStartTick.value = newTick;
@@ -244,7 +257,9 @@ const preview = () => {
           dragStartX.value = event.clientX;
           dragStartHandleX.value = newX;
         }
-      } else if (dragTarget.value === "end") {
+      }
+      // 終了ハンドルのドラッグ
+      if (dragTarget.value === "end") {
         if (newTick >= previewLoopStartTick.value) {
           previewLoopEndTick.value = newTick;
         } else {
@@ -268,13 +283,15 @@ const preview = () => {
   }
 };
 
+// ドラッグ終了処理
 const stopDragging = () => {
   if (!isDragging.value) return;
 
   isDragging.value = false;
   dragTarget.value = null;
   executePreviewProcess.value = false;
-  window.removeEventListener("mousemove", onMouseMove, true);
+  cursorState.value = "default";
+  window.removeEventListener("mousemove", handleMouseMove, true);
   window.removeEventListener("mouseup", stopDragging, true);
 
   if (previewRequestId != null) {
@@ -285,38 +302,97 @@ const stopDragging = () => {
   try {
     // ループ範囲を設定
     void setLoopRange(previewLoopStartTick.value, previewLoopEndTick.value);
-    // プレイヘッドを必ずループ開始位置に移動
-    try {
-      void store.dispatch("SET_PLAYHEAD_POSITION", {
-        position: previewLoopStartTick.value,
-      });
-    } catch (error) {
-      throw new Error("Failed to move playhead", { cause: error });
+    // 再生ヘッドがループ開始位置にあるか
+    // FIXME: usePlayheadPosition実装が完了したら移動
+    const isPlayheadToLoopStart =
+      previewLoopStartTick.value !== previewLoopEndTick.value;
+    if (isPlayheadToLoopStart) {
+      try {
+        void store.dispatch("SET_PLAYHEAD_POSITION", {
+          position: previewLoopStartTick.value,
+        });
+      } catch (error) {
+        throw new Error("Failed to move playhead", { cause: error });
+      }
     }
   } catch (error) {
-    throw new Error("Failed to set loop range", { cause: error });
+    throw new UnreachableError("Failed to set loop range");
   }
 };
 
-const onStartHandleMouseDown = (event: MouseEvent) => {
+const handleStartHandleMouseDown = (event: MouseEvent) => {
   startDragging("start", event);
 };
 
-const onEndHandleMouseDown = (event: MouseEvent) => {
+const handleEndHandleMouseDown = (event: MouseEvent) => {
   startDragging("end", event);
 };
 
+const handleAddOneMeasureLoop = (x: number) => {
+  addOneMeasureLoop(x, props.offset, tpqn.value, sequencerZoomX.value);
+};
+
+const handleContextMenu = (event: MouseEvent) => {
+  event.preventDefault();
+  event.stopPropagation();
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+  contextMenuPosition.value = event.clientX - rect.left;
+};
+
+const contextMenuPosition = ref(0);
+
+// コンテキストメニューのデータ
+const contextMenuData = computed<ContextMenuItemData[]>(() => {
+  const contextMenu = ref<InstanceType<typeof ContextMenu>>();
+  return [
+    {
+      type: "button",
+      label: isLoopEnabled.value ? "ループ無効" : "ループ有効",
+      onClick: () => {
+        contextMenu.value?.hide();
+        void setLoopEnabled(!isLoopEnabled.value);
+      },
+      disabled: contextMenuPosition.value == null,
+      disableWhenUiLocked: true,
+    },
+    {
+      type: "button",
+      label: "ループ範囲を作成",
+      onClick: () => {
+        contextMenu.value?.hide();
+        if (contextMenuPosition.value != null) {
+          handleAddOneMeasureLoop(contextMenuPosition.value);
+        }
+      },
+      disabled: contextMenuPosition.value == null,
+      disableWhenUiLocked: true,
+    },
+    {
+      type: "button",
+      label: "ループ範囲を削除",
+      onClick: () => {
+        contextMenu.value?.hide();
+        void clearLoopRange();
+      },
+      disabled: isEmpty.value,
+      disableWhenUiLocked: true,
+    },
+  ];
+});
+
 onUnmounted(() => {
-  window.removeEventListener("mousemove", onMouseMove, true);
+  cursorState.value = "default";
+  window.removeEventListener("mousemove", handleMouseMove, true);
   window.removeEventListener("mouseup", stopDragging, true);
   if (previewRequestId != null) {
     cancelAnimationFrame(previewRequestId);
-    previewRequestId = null;
   }
 });
 </script>
 
 <style scoped lang="scss">
+@use "@/styles/v2/variables" as vars;
+
 .sequencer-ruler-loop-lane {
   height: 24px;
   position: relative;
@@ -325,13 +401,21 @@ onUnmounted(() => {
   cursor: pointer;
   width: 100%;
   top: -24px;
-  z-index: 0;
+  isolation: isolate;
+
+  &.cursor-ew-resize {
+    cursor: ew-resize;
+  }
+
+  &:hover .loop-background {
+    fill: var(--scheme-color-sing-loop-area);
+  }
 
   &.is-enabled {
     .loop-range {
       fill: color-mix(
         in oklch,
-        var(--scheme-color-primary-fixed-dim) 30%,
+        var(--scheme-color-primary-fixed-dim) 40%,
         var(--scheme-color-sing-loop-area)
       );
     }
@@ -342,15 +426,12 @@ onUnmounted(() => {
     }
   }
 
-  &:not(.is-enabled) {
+  &:not(.is-enabled):not(.is-dragging) {
     .loop-range {
-      fill: var(--scheme-color-outline);
       opacity: 0.6;
     }
 
     .loop-handle {
-      fill: var(--scheme-color-outline);
-      stroke: var(--scheme-color-outline);
       opacity: 0.6;
     }
   }
@@ -386,6 +467,19 @@ onUnmounted(() => {
       opacity: 0.38;
     }
   }
+
+  &:not(.is-dragging) {
+    .loop-handle {
+      &:hover,
+      &-start:hover,
+      &-end:hover {
+        fill: var(--scheme-color-primary-fixed);
+        outline: 2px solid
+          oklch(from var(--scheme-color-primary-fixed) l c h / 0.5);
+        outline-offset: 1px;
+      }
+    }
+  }
 }
 
 .loop-background {
@@ -395,8 +489,6 @@ onUnmounted(() => {
 
 .loop-range {
   fill: var(--scheme-color-outline);
-  pointer-events: auto;
-  cursor: pointer;
 
   &-area {
     fill: transparent;
@@ -406,7 +498,6 @@ onUnmounted(() => {
 .loop-handle {
   fill: var(--scheme-color-outline);
   cursor: ew-resize;
-  pointer-events: auto;
 
   &.is-empty {
     fill: var(--scheme-color-outline);
@@ -422,19 +513,5 @@ onUnmounted(() => {
 .loop-handle-drag-area {
   fill: transparent;
   cursor: ew-resize;
-  pointer-events: auto;
-}
-
-.sequencer-ruler-loop-mask {
-  fill: var(--scheme-color-scrim);
-  pointer-events: none;
-}
-
-:root[is-dark-theme="false"] .sequencer-ruler-loop-mask {
-  opacity: 0.08;
-}
-
-:root[is-dark-theme="true"] .sequencer-ruler-loop-mask {
-  opacity: 0.24;
 }
 </style>

@@ -113,7 +113,6 @@
         icon="stop"
         @click="stop"
       />
-      <PlayheadPositionDisplay class="sing-playhead-position" />
       <QBtn
         flat
         round
@@ -124,6 +123,7 @@
       >
         <i class="material-symbols-outlined" style="font-size: 16px">repeat</i>
       </QBtn>
+      <PlayheadPositionDisplay class="sing-playhead-position" />
     </div>
     <!-- settings for edit controls -->
     <div class="sing-controls">

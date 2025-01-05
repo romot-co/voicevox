@@ -102,27 +102,6 @@
       :y2="gridHeight"
       class="sequencer-grid-measure-line"
     />
-    <!-- ループエリア外を暗くする -->
-    <g v-if="isLoopEnabled && loopStartTick !== loopEndTick">
-      <!-- 左側 -->
-      <rect
-        x="0"
-        y="0"
-        :width="loopStartX"
-        :height="gridHeight"
-        class="sequencer-grid-loop-mask"
-        pointer-events="none"
-      />
-      <!-- 右側 -->
-      <rect
-        :x="loopEndX"
-        y="0"
-        :width="gridWidth - loopEndX"
-        :height="gridHeight"
-        class="sequencer-grid-loop-mask"
-        pointer-events="none"
-      />
-    </g>
   </svg>
 </template>
 
@@ -140,9 +119,6 @@ const props = defineProps<{
   sequencerZoomY: number;
   sequencerSnapType: number;
   numMeasures: number;
-  isLoopEnabled: boolean;
-  loopStartTick: number;
-  loopEndTick: number;
 }>();
 
 const gridCellTicks = computed(() => {
@@ -230,27 +206,6 @@ const measureLines = computed(() => {
 });
 const horizontalLineIndices = computed(() => gridLines.value.horizontalLines);
 const octaveLineIndices = computed(() => gridLines.value.octaveLines);
-const beatLineIndices = computed(() =>
-  Array.from({ length: beatsPerMeasure.value - 1 }, (_, i) => i + 1),
-);
-const snapLinePositions = computed(() => {
-  const snapTicks = gridCellTicks.value;
-  const measureTicks =
-    (props.tpqn * 4 * beatsPerMeasure.value) / props.timeSignatures[0].beatType;
-  const snapCount = Math.floor(measureTicks / snapTicks);
-
-  return Array.from({ length: snapCount }, (_, index) => {
-    const currentTick = snapTicks * index;
-    return (currentTick / measureTicks) * measureWidth.value;
-  });
-});
-// ループのX座標を計算
-const loopStartX = computed(() => {
-  return tickToBaseX(props.loopStartTick, props.tpqn) * props.sequencerZoomX;
-});
-const loopEndX = computed(() => {
-  return tickToBaseX(props.loopEndTick, props.tpqn) * props.sequencerZoomX;
-});
 </script>
 
 <style scoped lang="scss">
@@ -302,20 +257,6 @@ const loopEndX = computed(() => {
   backface-visibility: hidden;
   stroke: var(--scheme-color-sing-grid-beat-line);
   stroke-width: 1px;
-}
-
-.sequencer-grid-loop-mask {
-  position: relative;
-  fill: var(--scheme-color-scrim);
-  pointer-events: none;
-}
-
-:root[is-dark-theme="false"] .sequencer-grid-loop-mask {
-  opacity: 0.05;
-}
-
-:root[is-dark-theme="true"] .sequencer-grid-loop-mask {
-  opacity: 0.24;
 }
 
 .edit-pitch {
