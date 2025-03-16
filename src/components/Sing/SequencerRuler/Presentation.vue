@@ -1,5 +1,11 @@
 <template>
-  <div ref="sequencerRuler" class="sequencer-ruler" @click="onClick">
+  <div
+    ref="sequencerRuler"
+    class="sequencer-ruler"
+    @click="onClick"
+    @mousemove="onMouseMove"
+    @mouseleave="onMouseLeave"
+  >
     <div class="sequencer-ruler-content" :style="{ width: `${props.width}px` }">
       <div class="sequencer-ruler-grid">
         <!-- NOTE: slotを使う(Copilotくんが提案してくれた) -->
@@ -11,6 +17,14 @@
       <div class="sequencer-ruler-loop">
         <slot name="loop" />
       </div>
+      <!-- ホバー時のプレイヘッド（薄い色で表示） -->
+      <div
+        v-if="props.hoverPlayheadX !== null"
+        class="sequencer-ruler-hover-playhead"
+        :style="{
+          transform: `translateX(${props.hoverPlayheadX - props.offset}px)`,
+        }"
+      />
       <div
         class="sequencer-ruler-playhead"
         :style="{
@@ -31,16 +45,29 @@ const props = defineProps<{
   width: number;
   playheadX: number;
   offset: number;
+  hoverPlayheadX: number | null;
 }>();
 
 const emit = defineEmits<{
   click: [MouseEvent];
+  mousemove: [MouseEvent];
+  mouseleave: [MouseEvent];
 }>();
 
 const sequencerRuler = ref<HTMLDivElement | null>(null);
 
 const onClick = (event: MouseEvent) => {
   emit("click", event);
+};
+
+const onMouseMove = (event: MouseEvent) => {
+  console.log("Ruler mousemove", event.offsetX);
+  emit("mousemove", event);
+};
+
+const onMouseLeave = (event: MouseEvent) => {
+  console.log("Ruler mouseleave");
+  emit("mouseleave", event);
 };
 </script>
 
@@ -60,6 +87,13 @@ const onClick = (event: MouseEvent) => {
   position: relative;
   width: 100%;
   height: 100%;
+  &:hover {
+    cursor: pointer;
+  }
+}
+
+.lane-background:hover {
+  fill: var(--scheme-color-sing-ruler-surface-hover);
 }
 
 .sequencer-ruler-loop {
@@ -88,5 +122,18 @@ const onClick = (event: MouseEvent) => {
   pointer-events: none;
   will-change: transform;
   z-index: vars.$z-index-sing-playhead;
+}
+
+.sequencer-ruler-hover-playhead {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2px;
+  height: 100%;
+  background: var(--scheme-color-inverse-surface);
+  opacity: 0.25;
+  pointer-events: none;
+  will-change: transform;
+  z-index: 5; // 実際のplayheadより下に表示
 }
 </style>

@@ -5,6 +5,7 @@
     :height
     shape-rendering="crispEdges"
     class="grid-lane"
+    style="pointer-events: none"
   >
     <defs>
       <pattern
