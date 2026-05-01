@@ -1,43 +1,31 @@
 <template>
-  <QBtnGroup flat class="edit-target-switcher">
-    <!-- 音素タイミング -->
-    <QBtn
-      dense
-      unelevated
+  <div
+    class="edit-target-switcher"
+    role="tablist"
+    aria-label="パラメータ編集対象"
+  >
+    <button
       class="segment-switch"
       :class="{ active: editTarget === 'PHONEME_TIMING' }"
+      type="button"
+      role="tab"
+      :aria-selected="editTarget === 'PHONEME_TIMING'"
       @click="changeEditTarget('PHONEME_TIMING')"
     >
-      <QIcon name="access_time" size="20px" />
-      <QTooltip
-        :delay="500"
-        anchor="bottom middle"
-        transitionShow=""
-        transitionHide=""
-      >
-        音素タイミング編集
-      </QTooltip>
-    </QBtn>
+      音素
+    </button>
 
-    <!-- ボリューム -->
-    <QBtn
-      dense
-      unelevated
+    <button
       class="segment-switch"
       :class="{ active: editTarget === 'VOLUME' }"
+      type="button"
+      role="tab"
+      :aria-selected="editTarget === 'VOLUME'"
       @click="changeEditTarget('VOLUME')"
     >
-      <QIcon name="volume_down" size="20px" />
-      <QTooltip
-        :delay="500"
-        anchor="bottom middle"
-        transitionShow=""
-        transitionHide=""
-      >
-        ボリューム編集
-      </QTooltip>
-    </QBtn>
-  </QBtnGroup>
+      声量
+    </button>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -51,22 +39,46 @@ defineProps<{
 
 <style scoped lang="scss">
 .edit-target-switcher {
-  border: 1px solid var(--scheme-color-outline-variant);
-  box-sizing: border-box;
-  padding: 3px;
-  height: 40px;
-  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  height: 24px;
+  padding: 1px;
+  border-radius: 7px;
+  background: var(--scheme-color-surface);
+  box-shadow: 0 1px 3px oklch(0% 0 0 / 0.14);
+  pointer-events: auto;
 }
 
 .segment-switch {
+  min-width: 56px;
+  height: 22px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
   color: var(--scheme-color-on-surface-variant);
-  height: 32px;
-  min-width: 32px;
-  border-radius: 16px !important;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--scheme-color-surface-container-highest);
+    color: var(--scheme-color-on-surface);
+  }
 
   &.active {
-    background: var(--scheme-color-secondary-container);
+    background: color-mix(
+      in oklch,
+      var(--scheme-color-secondary-container) 72%,
+      var(--scheme-color-surface)
+    );
     color: var(--scheme-color-on-secondary-container);
+    font-weight: 700;
+    box-shadow:
+      inset 0 0 0 1px
+        color-mix(in oklch, var(--scheme-color-secondary) 38%, transparent),
+      0 1px 2px oklch(0% 0 0 / 0.1);
   }
 }
 </style>

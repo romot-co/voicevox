@@ -8,11 +8,6 @@
     @pointerleave="onSurfacePointerLeave"
   >
     <canvas ref="canvas" class="volume-editor-canvas"></canvas>
-    <SequencerVolumeToolPalette
-      class="volume-tool-palette"
-      :sequencerVolumeTool="tool"
-      @update:sequencerVolumeTool="setTool"
-    />
     <ContextMenu ref="contextMenu" :menudata="contextMenuData" />
   </div>
 </template>
@@ -51,7 +46,6 @@ import { VolumeLine } from "@/sing/graphics/volumeLine";
 import type { VolumeSegment } from "@/sing/graphics/volumeLine";
 import { Color } from "@/sing/graphics/lineStrip";
 import { useSequencerGrid } from "@/composables/useSequencerGridPattern";
-import SequencerVolumeToolPalette from "@/components/Sing/SequencerVolumeToolPalette.vue";
 import {
   computeVolumeEditableFrameRanges,
   getOverlappingVolumeEditableFrameRanges,

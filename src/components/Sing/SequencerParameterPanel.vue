@@ -1,9 +1,16 @@
 <template>
   <div class="parameter-panel">
-    <div class="tool-area">
-      パラメータ
-      <!-- 仮のSwitcher -->
-      <ParameterPanelEditTargetSwitcher :editTarget :changeEditTarget />
+    <div class="tool-area" aria-label="パラメータ編集操作">
+      <div class="parameter-panel-toolbar-controls">
+        <div class="parameter-panel-mode-zone">
+          <ParameterPanelEditTargetSwitcher :editTarget :changeEditTarget />
+          <SequencerVolumeToolPalette
+            v-if="editTarget === 'VOLUME'"
+            :sequencerVolumeTool
+            @update:sequencerVolumeTool="setSequencerVolumeTool"
+          />
+        </div>
+      </div>
     </div>
     <div class="edit-area">
       <SequencerPhonemeTimingEditor v-if="editTarget === 'PHONEME_TIMING'" />
@@ -22,9 +29,10 @@
 import { computed } from "vue";
 import SequencerVolumeEditor from "@/components/Sing/SequencerVolumeEditor.vue";
 import { useStore } from "@/store";
-import type { ParameterPanelEditTarget } from "@/store/type";
+import type { ParameterPanelEditTarget, VolumeEditTool } from "@/store/type";
 import ParameterPanelEditTargetSwitcher from "@/components/Sing/ParameterPanelEditTargetSwitcher.vue";
 import SequencerPhonemeTimingEditor from "@/components/Sing/SequencerPhonemeTimingEditor.vue";
+import SequencerVolumeToolPalette from "@/components/Sing/SequencerVolumeToolPalette.vue";
 
 const props = defineProps<{
   offsetX: number;
@@ -41,11 +49,14 @@ const editTarget = computed(() => store.state.parameterPanelEditTarget);
 const changeEditTarget = (editTarget: ParameterPanelEditTarget) => {
   void store.actions.SET_PARAMETER_PANEL_EDIT_TARGET({ editTarget });
 };
+
+const sequencerVolumeTool = computed(() => store.state.sequencerVolumeTool);
+const setSequencerVolumeTool = (sequencerVolumeTool: VolumeEditTool) => {
+  void store.actions.SET_SEQUENCER_VOLUME_TOOL({ sequencerVolumeTool });
+};
 </script>
 
 <style scoped lang="scss">
-@use "@/styles/v2/variables" as vars;
-
 .parameter-panel {
   position: relative;
   width: 100%;
@@ -53,23 +64,41 @@ const changeEditTarget = (editTarget: ParameterPanelEditTarget) => {
 
   overflow: hidden;
   display: grid;
-  grid-template-rows: 48px 1fr;
+  grid-template-rows: 1fr;
 }
 
 .tool-area {
-  grid-column: 1;
-  grid-row: 1;
-  border-bottom: solid 1px var(--scheme-color-sing-piano-keys-right-border);
+  position: absolute;
+  top: 6px;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  pointer-events: none;
+}
 
+.parameter-panel-toolbar-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+}
+
+.parameter-panel-mode-zone {
+  grid-column: 2;
   display: flex;
   align-items: center;
-  padding-left: 8px;
-  column-gap: 8px;
+  gap: 8px;
+}
+
+.parameter-panel-mode-zone :deep(.tool-palette) {
+  pointer-events: auto;
 }
 
 .edit-area {
   grid-column: 1;
-  grid-row: 2;
+  grid-row: 1;
   position: relative;
   overflow: hidden;
 }

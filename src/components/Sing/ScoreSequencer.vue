@@ -1,230 +1,276 @@
 <template>
-  <QSplitter
-    :modelValue="isParameterPanelOpen ? parameterPanelHeight : 0"
-    reverse
-    unit="px"
-    horizontal
-    :disable="!isParameterPanelOpen"
-    :separatorStyle="{
-      display: isParameterPanelOpen ? 'block' : 'none',
-      // NOTE: 当たり判定を小さくする
-      overflow: 'hidden',
-      height: '4px',
-    }"
-    @update:modelValue="setParameterPanelHeight"
-  >
-    <template #before>
-      <div class="score-sequencer full-height">
-        <!-- 左上の角 -->
-        <div class="sequencer-corner"></div>
-        <!-- ルーラー -->
-        <SequencerRuler
-          class="sequencer-ruler"
-          :offset="scrollX"
-          :numMeasures
-        />
-        <!-- 鍵盤 -->
-        <SequencerKeys
-          class="sequencer-keys"
-          :offset="scrollY"
-          :blackKeyWidth="28"
-        />
-        <!-- グリッド -->
-        <SequencerGrid
-          class="sequencer-grid"
+  <div class="score-sequencer-shell">
+    <QSplitter
+      :modelValue="isParameterPanelOpen ? parameterPanelHeight : 0"
+      reverse
+      unit="px"
+      horizontal
+      class="full-height"
+      :disable="!isParameterPanelOpen"
+      :separatorStyle="{
+        display: isParameterPanelOpen ? 'block' : 'none',
+        // NOTE: 当たり判定を小さくする
+        overflow: 'hidden',
+        height: '4px',
+      }"
+      @update:modelValue="setParameterPanelHeight"
+    >
+      <template #before>
+        <div class="score-sequencer full-height">
+          <div class="piano-roll-toolbar" aria-label="ピアノロール操作">
+            <div class="piano-roll-mode-zone">
+              <div
+                class="piano-roll-edit-target-tabs"
+                role="tablist"
+                aria-label="編集対象"
+              >
+                <button
+                  class="piano-roll-edit-target-tab"
+                  :class="{ active: editTarget === 'NOTE' }"
+                  type="button"
+                  role="tab"
+                  :aria-selected="editTarget === 'NOTE'"
+                  @click="changeEditTarget('NOTE')"
+                >
+                  ノート
+                </button>
+                <button
+                  class="piano-roll-edit-target-tab"
+                  :class="{ active: editTarget === 'PITCH' }"
+                  type="button"
+                  role="tab"
+                  :aria-selected="editTarget === 'PITCH'"
+                  @click="changeEditTarget('PITCH')"
+                >
+                  ピッチ
+                </button>
+              </div>
+              <SequencerToolPalette
+                :editTarget
+                :sequencerNoteTool
+                :sequencerPitchTool
+                @update:sequencerNoteTool="setSequencerNoteTool"
+                @update:sequencerPitchTool="setSequencerPitchTool"
+              />
+            </div>
+            <label class="piano-roll-snap-control">
+              <span class="piano-roll-snap-label">スナップ</span>
+              <select
+                class="piano-roll-snap-select"
+                :value="sequencerSnapType"
+                @change="setSnapType"
+              >
+                <option
+                  v-for="option in snapTypeSelectOptions"
+                  :key="option.snapType"
+                  :value="option.snapType"
+                >
+                  {{ option.label }}
+                </option>
+              </select>
+            </label>
+          </div>
+          <!-- 左上の角 -->
+          <div class="sequencer-corner"></div>
+          <!-- ルーラー -->
+          <SequencerRuler
+            class="sequencer-ruler"
+            :offset="scrollX"
+            :numMeasures
+          />
+          <!-- 鍵盤 -->
+          <SequencerKeys
+            class="sequencer-keys"
+            :offset="scrollY"
+            :blackKeyWidth="28"
+          />
+          <!-- グリッド -->
+          <SequencerGrid
+            class="sequencer-grid"
+            :offsetX="scrollX"
+            :offsetY="scrollY"
+            :style="{
+              marginRight: `${scrollBarWidth}px`,
+              marginBottom: `${scrollBarWidth}px`,
+            }"
+          />
+          <!-- キャラクター全身 -->
+          <CharacterPortrait
+            class="sequencer-character-portrait"
+            :style="{
+              marginRight: `${scrollBarWidth}px`,
+              marginBottom: `${scrollBarWidth}px`,
+            }"
+          />
+          <!-- ノート入力のための補助線 -->
+          <div
+            v-if="editTarget === 'NOTE' && showGuideLine"
+            class="sequencer-guideline-container"
+            :style="{
+              marginRight: `${scrollBarWidth}px`,
+              marginBottom: `${scrollBarWidth}px`,
+            }"
+          >
+            <div
+              class="sequencer-guideline"
+              :style="{
+                transform: `translateX(${guideLineX - scrollX}px)`,
+              }"
+            ></div>
+          </div>
+          <!-- シーケンサ -->
+          <div
+            ref="sequencerBody"
+            class="sequencer-body"
+            :class="{
+              'edit-note': editTarget === 'NOTE',
+              'edit-pitch': editTarget === 'PITCH',
+              [cursorClass]: true,
+            }"
+            aria-label="シーケンサ"
+            @pointerdown="onPointerDown"
+            @pointerenter="onPointerEnter"
+            @pointerleave="onPointerLeave"
+            @dblclick.stop="onDoubleClick"
+            @wheel="onWheel"
+            @scroll="onScroll"
+            @contextmenu.prevent
+          >
+            <!-- 実際のグリッド全体と同じ大きさを持つ要素 -->
+            <SequencerGridSpacer />
+            <!-- undefinedだと警告が出るのでnullを渡す -->
+            <!-- TODO: ちゃんとしたトラックIDを渡す -->
+            <SequencerShadowNote
+              v-for="note in notesInOtherTracks"
+              :key="note.id"
+              :note
+            />
+            <SequencerNote
+              v-for="note in editTarget === 'NOTE'
+                ? notesInSelectedTrackWithPreview
+                : notesInSelectedTrack"
+              :key="note.id"
+              class="sequencer-note"
+              :note
+              :isSelected="selectedNoteIds.has(note.id)"
+              :isPreview="previewNoteIds.has(note.id)"
+              :isOverlapping="overlappingNoteIdsInSelectedTrack.has(note.id)"
+              :previewLyric="previewLyrics.get(note.id) ?? null"
+              :nowPreviewing
+              :previewMode
+              :cursorClass
+              @barPointerdown="onNoteBarPointerDown($event, note)"
+              @barDoubleClick="onNoteBarDoubleClick($event, note)"
+              @leftEdgePointerdown="onNoteLeftEdgePointerDown($event, note)"
+              @rightEdgePointerdown="onNoteRightEdgePointerDown($event, note)"
+            />
+            <SequencerLyricInput
+              v-if="editingLyricNote != undefined"
+              :editingLyricNote
+              @input="onLyricInput"
+              @keydown="onLyricInputKeydown"
+              @blur="onLyricInputBlur"
+            />
+          </div>
+          <SequencerPitch
+            v-if="editTarget === 'PITCH'"
+            class="sequencer-pitch"
+            :style="{
+              marginRight: `${scrollBarWidth}px`,
+              marginBottom: `${scrollBarWidth}px`,
+            }"
+            :offsetX="scrollX"
+            :offsetY="scrollY"
+            :previewPitchEdit
+          />
+          <div
+            class="sequencer-overlay"
+            :style="{
+              marginRight: `${scrollBarWidth}px`,
+              marginBottom: `${scrollBarWidth}px`,
+            }"
+          >
+            <div
+              v-if="previewRectForRectSelect != undefined"
+              class="rect-select-preview"
+              :style="{
+                left: `${previewRectForRectSelect.x}px`,
+                top: `${previewRectForRectSelect.y}px`,
+                width: `${previewRectForRectSelect.width}px`,
+                height: `${previewRectForRectSelect.height}px`,
+              }"
+            ></div>
+            <SequencerPhraseIndicator
+              v-for="phraseInfo in phraseInfosInOtherTracks"
+              :key="phraseInfo.key"
+              :phraseKey="phraseInfo.key"
+              :isInSelectedTrack="false"
+              class="sequencer-phrase-indicator"
+              :style="{
+                width: `${phraseInfo.width}px`,
+                transform: `translateX(${phraseInfo.x - scrollX}px)`,
+              }"
+            />
+            <SequencerPhraseIndicator
+              v-for="phraseInfo in phraseInfosInSelectedTrack"
+              :key="phraseInfo.key"
+              :phraseKey="phraseInfo.key"
+              isInSelectedTrack
+              class="sequencer-phrase-indicator"
+              :style="{
+                width: `${phraseInfo.width}px`,
+                transform: `translateX(${phraseInfo.x - scrollX}px)`,
+              }"
+            />
+            <div
+              class="sequencer-playhead"
+              data-testid="sequencer-playhead"
+              :style="{
+                transform: `translateX(${playheadX - scrollX - 1}px)`,
+              }"
+            ></div>
+          </div>
+          <QSlider
+            :modelValue="zoomX"
+            :min="ZOOM_X_MIN"
+            :max="ZOOM_X_MAX"
+            :step="ZOOM_X_STEP"
+            class="zoom-x-slider"
+            trackSize="2px"
+            @update:modelValue="setZoomX"
+          />
+          <QSlider
+            :modelValue="zoomY"
+            :min="ZOOM_Y_MIN"
+            :max="ZOOM_Y_MAX"
+            :step="ZOOM_Y_STEP"
+            vertical
+            reverse
+            class="zoom-y-slider"
+            trackSize="2px"
+            @update:modelValue="setZoomY"
+          />
+          <ContextMenu ref="contextMenu" :menudata="contextMenuData" />
+        </div>
+      </template>
+      <template #after>
+        <SequencerParameterPanel
+          v-if="isParameterPanelOpen"
           :offsetX="scrollX"
-          :offsetY="scrollY"
-          :style="{
-            marginRight: `${scrollBarWidth}px`,
-            marginBottom: `${scrollBarWidth}px`,
-          }"
-        />
-        <!-- キャラクター全身 -->
-        <CharacterPortrait
-          class="sequencer-character-portrait"
-          :style="{
-            marginRight: `${scrollBarWidth}px`,
-            marginBottom: `${scrollBarWidth}px`,
-          }"
-        />
-        <!-- ノート入力のための補助線 -->
-        <div
-          v-if="editTarget === 'NOTE' && showGuideLine"
-          class="sequencer-guideline-container"
-          :style="{
-            marginRight: `${scrollBarWidth}px`,
-            marginBottom: `${scrollBarWidth}px`,
-          }"
-        >
-          <div
-            class="sequencer-guideline"
-            :style="{
-              transform: `translateX(${guideLineX - scrollX}px)`,
-            }"
-          ></div>
-        </div>
-        <!-- シーケンサ -->
-        <div
-          ref="sequencerBody"
-          class="sequencer-body"
-          :class="{
-            'edit-note': editTarget === 'NOTE',
-            'edit-pitch': editTarget === 'PITCH',
-            [cursorClass]: true,
-          }"
-          aria-label="シーケンサ"
-          @pointerdown="onPointerDown"
-          @pointerenter="onPointerEnter"
-          @pointerleave="onPointerLeave"
-          @dblclick.stop="onDoubleClick"
-          @wheel="onWheel"
-          @scroll="onScroll"
-          @contextmenu.prevent
-        >
-          <!-- 実際のグリッド全体と同じ大きさを持つ要素 -->
-          <SequencerGridSpacer />
-          <!-- undefinedだと警告が出るのでnullを渡す -->
-          <!-- TODO: ちゃんとしたトラックIDを渡す -->
-          <SequencerShadowNote
-            v-for="note in notesInOtherTracks"
-            :key="note.id"
-            :note
-          />
-          <SequencerNote
-            v-for="note in editTarget === 'NOTE'
-              ? notesInSelectedTrackWithPreview
-              : notesInSelectedTrack"
-            :key="note.id"
-            class="sequencer-note"
-            :note
-            :isSelected="selectedNoteIds.has(note.id)"
-            :isPreview="previewNoteIds.has(note.id)"
-            :isOverlapping="overlappingNoteIdsInSelectedTrack.has(note.id)"
-            :previewLyric="previewLyrics.get(note.id) ?? null"
-            :nowPreviewing
-            :previewMode
-            :cursorClass
-            @barPointerdown="onNoteBarPointerDown($event, note)"
-            @barDoubleClick="onNoteBarDoubleClick($event, note)"
-            @leftEdgePointerdown="onNoteLeftEdgePointerDown($event, note)"
-            @rightEdgePointerdown="onNoteRightEdgePointerDown($event, note)"
-          />
-          <SequencerLyricInput
-            v-if="editingLyricNote != undefined"
-            :editingLyricNote
-            @input="onLyricInput"
-            @keydown="onLyricInputKeydown"
-            @blur="onLyricInputBlur"
-          />
-        </div>
-        <SequencerPitch
-          v-if="editTarget === 'PITCH'"
-          class="sequencer-pitch"
-          :style="{
-            marginRight: `${scrollBarWidth}px`,
-            marginBottom: `${scrollBarWidth}px`,
-          }"
-          :offsetX="scrollX"
-          :offsetY="scrollY"
-          :previewPitchEdit
-        />
-        <div
-          class="sequencer-overlay"
-          :style="{
-            marginRight: `${scrollBarWidth}px`,
-            marginBottom: `${scrollBarWidth}px`,
-          }"
-        >
-          <div
-            v-if="previewRectForRectSelect != undefined"
-            class="rect-select-preview"
-            :style="{
-              left: `${previewRectForRectSelect.x}px`,
-              top: `${previewRectForRectSelect.y}px`,
-              width: `${previewRectForRectSelect.width}px`,
-              height: `${previewRectForRectSelect.height}px`,
-            }"
-          ></div>
-          <SequencerPhraseIndicator
-            v-for="phraseInfo in phraseInfosInOtherTracks"
-            :key="phraseInfo.key"
-            :phraseKey="phraseInfo.key"
-            :isInSelectedTrack="false"
-            class="sequencer-phrase-indicator"
-            :style="{
-              width: `${phraseInfo.width}px`,
-              transform: `translateX(${phraseInfo.x - scrollX}px)`,
-            }"
-          />
-          <SequencerPhraseIndicator
-            v-for="phraseInfo in phraseInfosInSelectedTrack"
-            :key="phraseInfo.key"
-            :phraseKey="phraseInfo.key"
-            isInSelectedTrack
-            class="sequencer-phrase-indicator"
-            :style="{
-              width: `${phraseInfo.width}px`,
-              transform: `translateX(${phraseInfo.x - scrollX}px)`,
-            }"
-          />
-          <div
-            class="sequencer-playhead"
-            data-testid="sequencer-playhead"
-            :style="{
-              transform: `translateX(${playheadX - scrollX - 1}px)`,
-            }"
-          ></div>
-        </div>
-        <QSlider
-          :modelValue="zoomX"
-          :min="ZOOM_X_MIN"
-          :max="ZOOM_X_MAX"
-          :step="ZOOM_X_STEP"
-          class="zoom-x-slider"
-          trackSize="2px"
-          @update:modelValue="setZoomX"
-        />
-        <QSlider
-          :modelValue="zoomY"
-          :min="ZOOM_Y_MIN"
-          :max="ZOOM_Y_MAX"
-          :step="ZOOM_Y_STEP"
-          vertical
-          reverse
-          class="zoom-y-slider"
-          trackSize="2px"
-          @update:modelValue="setZoomY"
-        />
-        <ContextMenu ref="contextMenu" :menudata="contextMenuData" />
-        <SequencerToolPalette
-          :editTarget
-          :sequencerNoteTool
-          :sequencerPitchTool
-          @update:sequencerNoteTool="
-            (value) =>
-              store.dispatch('SET_SEQUENCER_NOTE_TOOL', {
-                sequencerNoteTool: value,
-              })
-          "
-          @update:sequencerPitchTool="
-            (value) =>
-              store.dispatch('SET_SEQUENCER_PITCH_TOOL', {
-                sequencerPitchTool: value,
-              })
+          @update:needsAutoScroll="
+            (value) => (parameterPanelNeedsAutoScroll = value)
           "
         />
-      </div>
-    </template>
-    <template #after>
-      <SequencerParameterPanel
-        v-if="isParameterPanelOpen"
-        :offsetX="scrollX"
-        @update:needsAutoScroll="
-          (value) => (parameterPanelNeedsAutoScroll = value)
-        "
-      />
-    </template>
-  </QSplitter>
+      </template>
+    </QSplitter>
+    <div
+      class="sequencer-full-playhead"
+      data-testid="sequencer-full-playhead"
+      :style="{
+        transform: `translateX(${playheadX - scrollX + 48 - 1}px)`,
+      }"
+    ></div>
+  </div>
 </template>
 
 <script lang="ts">
@@ -257,11 +303,16 @@ import type { Note } from "@/domain/project/type";
 import {
   getNoteDuration,
   getTimeSignaturePositions,
+  isTriplet,
   noteNumberToFrequency,
   tickToMeasureNumber,
   tickToSecond,
 } from "@/sing/music";
-import { getEndTicksOfPhrase, getStartTicksOfPhrase } from "@/sing/domain";
+import {
+  getEndTicksOfPhrase,
+  getSnapTypes,
+  getStartTicksOfPhrase,
+} from "@/sing/domain";
 import {
   tickToBaseX,
   baseXToTick,
@@ -295,6 +346,11 @@ import type {
   PositionOnSequencer,
   ViewportInfo,
 } from "@/sing/sequencerStateMachine/common";
+import type {
+  NoteEditTool,
+  PitchEditTool,
+  SequencerEditTarget,
+} from "@/store/type";
 import { useAutoScrollOnEdge } from "@/composables/useAutoScrollOnEdge";
 
 const { warn } = createLogger("ScoreSequencer");
@@ -535,10 +591,43 @@ const guideLineX = computed(() => {
 
 // 編集対象
 const editTarget = computed(() => store.state.sequencerEditTarget);
+const changeEditTarget = (editTarget: SequencerEditTarget) => {
+  void store.actions.SET_EDIT_TARGET({ editTarget });
+};
 // 選択中のノート編集ツール
 const sequencerNoteTool = computed(() => state.sequencerNoteTool);
+const setSequencerNoteTool = (sequencerNoteTool: NoteEditTool) => {
+  void store.actions.SET_SEQUENCER_NOTE_TOOL({ sequencerNoteTool });
+};
 // 選択中のピッチ編集ツール
 const sequencerPitchTool = computed(() => state.sequencerPitchTool);
+const setSequencerPitchTool = (sequencerPitchTool: PitchEditTool) => {
+  void store.actions.SET_SEQUENCER_PITCH_TOOL({ sequencerPitchTool });
+};
+
+const sequencerSnapType = computed(() => state.sequencerSnapType);
+const snapTypeSelectOptions = computed(() => {
+  return getSnapTypes(tpqn.value)
+    .sort((a, b) => {
+      if (isTriplet(a) === isTriplet(b)) {
+        return a - b;
+      } else {
+        return isTriplet(a) ? 1 : -1;
+      }
+    })
+    .map((snapType) => {
+      if (isTriplet(snapType)) {
+        return { snapType, label: `1/${(snapType / 3) * 2} T` };
+      } else {
+        return { snapType, label: `1/${snapType}` };
+      }
+    });
+});
+const setSnapType = (event: Event) => {
+  void store.actions.SET_SNAP_TYPE({
+    snapType: Number((event.target as HTMLSelectElement).value),
+  });
+};
 
 // カーソル用のCSSクラス名ヘルパー
 const cursorClass = computed(() => {
@@ -1221,19 +1310,146 @@ const contextMenuData = computed<ContextMenuItemData[]>(() => {
 @use "@/styles/v2/variables" as vars;
 @use "@/styles/colors" as colors;
 
+.score-sequencer-shell {
+  --sequencer-ruler-height: 40px;
+
+  position: relative;
+  height: 100%;
+  min-height: 0;
+}
+
+.sequencer-full-playhead {
+  position: absolute;
+  top: var(--sequencer-ruler-height);
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  background: var(--scheme-color-inverse-surface);
+  pointer-events: none;
+  will-change: transform;
+  z-index: calc(#{vars.$z-index-sing-playhead} + 1);
+}
+
 .score-sequencer {
   backface-visibility: hidden;
   display: grid;
-  grid-template-rows: 40px 1fr;
-  grid-template-columns: 48px 1fr;
+  grid-template-rows: var(--sequencer-ruler-height) 1fr;
+  grid-template-columns: 48px minmax(0, 1fr);
   position: relative;
+}
+
+.piano-roll-toolbar {
+  position: absolute;
+  top: 6px;
+  left: 0;
+  right: 0;
+  z-index: calc(#{vars.$z-index-sing-playhead} + 2);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  height: 28px;
+  padding: 0 8px;
+  pointer-events: none;
+}
+
+.piano-roll-mode-zone {
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.piano-roll-mode-zone :deep(.tool-palette) {
+  pointer-events: auto;
+}
+
+.piano-roll-edit-target-tabs {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  padding: 1px;
+  border-radius: 7px;
+  background: var(--scheme-color-surface);
+  box-shadow: 0 1px 3px oklch(0% 0 0 / 0.14);
+  pointer-events: auto;
+}
+
+.piano-roll-edit-target-tab {
+  min-width: 52px;
+  height: 22px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--scheme-color-on-surface-variant);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--scheme-color-surface-container-highest);
+    color: var(--scheme-color-on-surface);
+  }
+
+  &.active {
+    background: color-mix(
+      in oklch,
+      var(--scheme-color-secondary-container) 72%,
+      var(--scheme-color-surface)
+    );
+    color: var(--scheme-color-on-secondary-container);
+    font-weight: 700;
+    box-shadow:
+      inset 0 0 0 1px
+        color-mix(in oklch, var(--scheme-color-secondary) 38%, transparent),
+      0 1px 2px oklch(0% 0 0 / 0.1);
+  }
+}
+
+.piano-roll-snap-control {
+  grid-column: 3;
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 4px 0 8px;
+  border-radius: 6px;
+  color: var(--scheme-color-on-surface-variant);
+  font-size: 12px;
+  font-weight: 500;
+  background: color-mix(in oklch, var(--scheme-color-surface) 86%, transparent);
+  box-shadow: 0 1px 3px oklch(0% 0 0 / 0.12);
+  pointer-events: auto;
+
+  &:hover {
+    background: var(--scheme-color-surface-container-highest);
+  }
+}
+
+.piano-roll-snap-label {
+  line-height: 1;
+}
+
+.piano-roll-snap-select {
+  height: 22px;
+  min-width: 62px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--scheme-color-on-surface);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  outline: none;
+  cursor: pointer;
 }
 
 .sequencer-corner {
   grid-row: 1;
   grid-column: 1;
   background: var(--scheme-color-sing-ruler-surface);
-  border-radius: 8px 0 0 0;
 }
 
 .sequencer-ruler {
@@ -1280,6 +1496,41 @@ const contextMenuData = computed<ContextMenuItemData[]>(() => {
   touch-action: none;
 
   // スクロールバー上のカーソルが要素のものになってしまうためデフォルトカーソルにする
+  &::-webkit-scrollbar {
+    background-color: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background-color: color-mix(
+      in oklch,
+      var(--scheme-color-outline-variant) 44%,
+      transparent
+    );
+    background-clip: content-box;
+    border: 3px solid transparent;
+    border-radius: 999px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(
+      in oklch,
+      var(--scheme-color-outline-variant) 68%,
+      transparent
+    );
+  }
+
+  &::-webkit-scrollbar-thumb:active {
+    background-color: color-mix(
+      in oklch,
+      var(--scheme-color-outline-variant) 82%,
+      transparent
+    );
+  }
+
+  &::-webkit-scrollbar-corner {
+    background-color: transparent;
+  }
+
   &::-webkit-scrollbar-thumb:hover,
   &::-webkit-scrollbar-thumb:active,
   &::-webkit-scrollbar-track:hover,
