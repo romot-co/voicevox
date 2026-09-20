@@ -630,6 +630,7 @@ onUnmounted(() => {
   height: v-bind("`${VOLUME_EDITOR_LAYOUT.noteLaneHeightPx}px`");
   overflow: hidden;
   color: var(--scheme-color-song-volume-note-tick);
+  font-family: "Unhinted Rounded M+ 1p Medium", sans-serif;
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
