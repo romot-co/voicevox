@@ -5,18 +5,31 @@
       ref="parameterArea"
       class="parameter-area"
       @pointerdown="onPointerDown"
+      @dblclick="onDoubleClick"
       @pointermove="onPointerMove"
+      @pointerleave="onPointerMove"
       @wheel="onWheel"
     >
-      <SequencerParameterGrid class="parameter-grid" :viewportInfo />
-      <SequencerWaveform class="waveform" :viewportInfo />
-      <SequencerNoteTimings class="note-timings" :viewportInfo />
+      <SequencerParameterGrid
+        class="parameter-grid"
+        :viewportInfo
+        beatLineColorVariable="--scheme-color-song-phoneme-grid-beat-line"
+      />
       <SequencerPhonemeTimings
         class="phoneme-timings"
         :viewportInfo
         :previewPhonemeTiming
         :phonemeTimingInfos
-        :phonemeTextY
+        :hoveredPhoneme
+      />
+      <SequencerNoteTimings
+        class="note-timings"
+        :viewportInfo
+        :activeNoteId="
+          previewPhonemeTiming?.type === 'move'
+            ? previewPhonemeTiming.noteId
+            : hoveredPhoneme?.noteId
+        "
       />
       <SequencerPhonemeTimingToolPalette
         :sequencerPhonemeTimingTool
@@ -36,7 +49,6 @@ import {
   onUnmountedOrDeactivated,
 } from "@/composables/onMountOrActivate";
 import SequencerParameterGrid from "@/components/Song/SequencerParameterGrid.vue";
-import SequencerWaveform from "@/components/Song/SequencerWaveform.vue";
 import SequencerPhonemeTimings from "@/components/Song/SequencerPhonemeTimings.vue";
 import SequencerNoteTimings from "@/components/Song/SequencerNoteTimings.vue";
 import SequencerPhonemeTimingToolPalette from "@/components/Song/SequencerPhonemeTimingToolPalette.vue";
@@ -87,13 +99,18 @@ const phonemeTimingInfos = computed(() => {
   );
 });
 
-const { stateMachineProcess, cursorState, previewMode, previewPhonemeTiming } =
-  usePhonemeTimingEditorStateMachine(
-    store,
-    viewportInfo,
-    phonemeTimingInfos,
-    phraseInfos,
-  );
+const {
+  stateMachineProcess,
+  cursorState,
+  previewMode,
+  previewPhonemeTiming,
+  hoveredPhoneme,
+} = usePhonemeTimingEditorStateMachine(
+  store,
+  viewportInfo,
+  phonemeTimingInfos,
+  phraseInfos,
+);
 
 const parameterArea = ref<HTMLElement | null>(null);
 
@@ -102,15 +119,15 @@ const cursorStyle = computed(() => {
     case "EW_RESIZE":
       return "ew-resize";
     case "ERASE":
-      // NOTE: 消しゴム用のカーソル・画像がないため、一旦defaultにしている
-      // TODO: 消しゴム用のカーソル・画像を用意して差し替える
-      return "default";
+      // TODO: 消しゴム用のカーソル・画像を用意して差し替える。
+      // 境界を選んで編集を消す操作に合わせ、暫定的にcellを使う。
+      return "cell";
     default:
       return "default";
   }
 });
 
-const getLocalPositionX = (event: PointerEvent): number => {
+const getLocalPositionX = (event: MouseEvent): number => {
   const parameterAreaElement = parameterArea.value;
   assertNonNullable(parameterAreaElement);
   return getXInBorderBox(event.clientX, parameterAreaElement);
@@ -121,6 +138,15 @@ const onPointerDown = (event: PointerEvent) => {
     type: "pointerEvent",
     targetArea: "PhonemeTimingArea",
     pointerEvent: event,
+    positionX: getLocalPositionX(event),
+  });
+};
+
+const onDoubleClick = (event: MouseEvent) => {
+  stateMachineProcess({
+    type: "mouseEvent",
+    targetArea: "PhonemeTimingArea",
+    mouseEvent: event,
     positionX: getLocalPositionX(event),
   });
 };
@@ -204,18 +230,6 @@ onUnmountedOrDeactivated(() => {
   window.removeEventListener("pointerup", onWindowPointerUp);
   window.removeEventListener("pointercancel", onWindowPointerCancel);
 });
-
-// parameter-areaの各行の高さ
-const TOP_ROW_HEIGHT = 12;
-const NOTES_ROW_HEIGHT = 26;
-const PHONEME_TEXTS_ROW_HEIGHT = 28;
-
-// 音素文字行内での音素文字の上端オフセット
-const PHONEME_TEXT_TOP_OFFSET_IN_ROW = 12;
-
-// SequencerPhonemeTimingsの音素文字のY座標
-const phonemeTextY =
-  TOP_ROW_HEIGHT + NOTES_ROW_HEIGHT + PHONEME_TEXT_TOP_OFFSET_IN_ROW;
 </script>
 
 <style scoped lang="scss">
@@ -235,37 +249,22 @@ const phonemeTextY =
 }
 
 .parameter-area {
+  background: var(--scheme-color-song-phoneme-surface);
   grid-column: 2;
   grid-row: 1;
   overflow: hidden;
   position: relative;
 
   display: grid;
-  grid-template-rows:
-    v-bind("`${TOP_ROW_HEIGHT}px`")
-    v-bind("`${NOTES_ROW_HEIGHT}px`")
-    v-bind("`${PHONEME_TEXTS_ROW_HEIGHT}px`")
-    1fr;
+  grid-template-rows: 1fr;
   cursor: v-bind(cursorStyle);
 }
 
-.parameter-grid {
-  grid-column: 1;
-  grid-row: 1 / 5;
-}
-
-.waveform {
-  grid-column: 1;
-  grid-row: 4 / 5;
-}
-
-.note-timings {
-  grid-column: 1;
-  grid-row: 2 / 3;
-}
-
+.parameter-grid,
+.note-timings,
 .phoneme-timings {
   grid-column: 1;
-  grid-row: 1 / 5;
+  grid-row: 1;
+  min-height: 0;
 }
 </style>

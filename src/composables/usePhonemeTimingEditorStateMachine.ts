@@ -2,6 +2,7 @@ import { computed, type ComputedRef, ref, watch } from "vue";
 import type { CursorState, ViewportInfo } from "@/song/viewHelper";
 import type {
   PhonemeTimingPreview,
+  PhonemeTimingTarget,
   PhonemeTimingEditorPartialStore,
   PhonemeTimingEditorPreviewMode,
   PhonemeTimingEditorInput,
@@ -22,6 +23,7 @@ export const usePhonemeTimingEditorStateMachine = (
   phraseInfos: ComputedRef<Map<PhraseKey, PhraseInfo>>,
 ) => {
   const refs = {
+    hoveredPhoneme: ref<PhonemeTimingTarget>(),
     previewPhonemeTiming: ref<PhonemeTimingPreview | undefined>(undefined),
     previewMode: ref<PhonemeTimingEditorPreviewMode>("IDLE"),
     cursorState: ref<CursorState>("UNSET"),
@@ -57,11 +59,17 @@ export const usePhonemeTimingEditorStateMachine = (
 
   watch(idleStateId, (value) => {
     if (stateMachine.currentStateId !== value) {
+      refs.hoveredPhoneme.value = undefined;
       stateMachine.transitionTo(value, undefined);
     }
   });
 
+  watch(computedRefs.selectedTrackId, () => {
+    refs.hoveredPhoneme.value = undefined;
+  });
+
   return {
+    hoveredPhoneme: computed(() => refs.hoveredPhoneme.value),
     stateMachineProcess: (input: PhonemeTimingEditorInput) => {
       stateMachine.process(input);
     },

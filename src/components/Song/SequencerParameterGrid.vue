@@ -205,6 +205,16 @@ onMounted(async () => {
   stage = new PIXI.Container();
 
   const callback = () => {
+    assertNonNullable(renderer);
+    // 画面移動や表示倍率の変更後も、Canvasを実際の画素密度で描画する。
+    if (renderer.resolution !== window.devicePixelRatio) {
+      renderer.resize(
+        renderer.screen.width,
+        renderer.screen.height,
+        window.devicePixelRatio,
+      );
+      renderInNextFrame = true;
+    }
     if (renderInNextFrame) {
       render();
       renderInNextFrame = false;

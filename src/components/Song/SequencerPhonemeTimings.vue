@@ -1,6 +1,29 @@
 <template>
   <div ref="canvasContainer" class="canvas-container">
     <canvas ref="canvas"></canvas>
+    <div
+      v-for="label in labels"
+      :key="label.key"
+      class="phoneme-label"
+      :class="{ active: label.active }"
+      :style="{
+        left: `${label.x}px`,
+        top: `${label.y}px`,
+        maxWidth: `${label.maxWidth}px`,
+      }"
+    >
+      {{ label.text }}
+    </div>
+    <div
+      v-if="chip"
+      class="phoneme-chip"
+      :style="{ left: `${chip.x}px`, top: `${chip.y}px` }"
+    >
+      <span class="phoneme-chip-name">{{ chip.phoneme }}</span>
+      <span v-if="chip.deltaMs !== 0" class="phoneme-chip-delta"
+        >{{ chip.deltaMs > 0 ? "+" : "" }}{{ chip.deltaMs }} ms</span
+      >
+    </div>
   </div>
 </template>
 
@@ -10,28 +33,32 @@ import * as PIXI from "pixi.js";
 import { useStore } from "@/store";
 import { useMounted } from "@/composables/useMounted";
 import { secondToTick } from "@/song/music";
+import { isVowel } from "@/song/domain";
 import { tickToBaseX, type ViewportInfo } from "@/song/viewHelper";
-import { clamp, getNext } from "@/song/utility";
-import { getOrThrow } from "@/helpers/mapHelper";
-import { UnreachableError, assertNonNullable } from "@/type/utility";
+import { assertNonNullable } from "@/type/utility";
 import type {
   PhonemeTimingPreview,
   PhonemeTimingInfo,
+  PhonemeTimingTarget,
 } from "@/song/phonemeTimingEditorStateMachine/common";
 
-type PhonemeDisplayState = "default" | "edited" | "movePreview";
-
-type PhonemeDisplayInfo = {
-  readonly phoneme: string;
-  readonly displayState: PhonemeDisplayState;
-  startTime: number;
-};
+import {
+  buildPhonemeDisplayInfos,
+  groupPhonemeDisplayInfos,
+} from "@/song/phonemeTimingDisplay";
+import { createThemeColorResolver } from "@/song/graphics/cssColor";
+import type { Color } from "@/song/graphics/lineStrip";
+import {
+  getPhonemeTimingLayout,
+  PHONEME_TIMING_LAYOUT,
+  PHONEME_LABEL_FONT,
+} from "@/components/Song/SequencerPhonemeTimingEditor/style";
 
 const props = defineProps<{
   viewportInfo: ViewportInfo;
   previewPhonemeTiming?: PhonemeTimingPreview;
   phonemeTimingInfos: PhonemeTimingInfo[];
-  phonemeTextY: number;
+  hoveredPhoneme?: PhonemeTimingTarget;
 }>();
 
 const store = useStore();
@@ -42,33 +69,37 @@ const previewPhonemeTiming = computed(() => props.previewPhonemeTiming);
 const phonemeTimingInfos = computed(() => props.phonemeTimingInfos);
 const editorFrameRate = computed(() => store.state.editorFrameRate);
 
-type PhonemeTimingLineStyle = { color: number; alpha: number; width: number };
-const phonemeTimingLineStyles: Record<
-  "light" | "dark",
-  Record<PhonemeDisplayState, PhonemeTimingLineStyle>
-> = {
-  light: {
-    default: { color: 0x8bc796, alpha: 1, width: 1 },
-    edited: { color: 0x00a73f, alpha: 1, width: 2 },
-    movePreview: { color: 0x3d7eff, alpha: 1, width: 2 },
-  },
-  dark: {
-    default: { color: 0x547359, alpha: 1, width: 1 },
-    edited: { color: 0x28a652, alpha: 1, width: 2 },
-    movePreview: { color: 0x699ff0, alpha: 1, width: 2 },
-  },
-};
+const resolvePhonemeColors = createThemeColorResolver({
+  rowLine: "--scheme-color-song-phoneme-row-line",
+  band: "--scheme-color-song-phoneme-band-container",
+  bandHover: "--scheme-color-song-phoneme-band-container-hover",
+  head: "--scheme-color-song-phoneme-bound-head",
+  follow: "--scheme-color-song-phoneme-bound-follow",
+  hover: "--scheme-color-song-phoneme-bound-hover",
+  edited: "--scheme-color-song-phoneme-bound-edited",
+  editing: "--scheme-color-song-phoneme-bound-editing",
+  bridge: "--scheme-color-song-phoneme-bridge",
+  bridgeHover: "--scheme-color-song-phoneme-bridge-hover",
+  ghost: "--scheme-color-song-phoneme-ghost",
+  guide: "--scheme-color-song-phoneme-guide",
+  notePosition: "--scheme-color-song-phoneme-note-position",
+});
+const labels = ref<
+  {
+    key: string;
+    x: number;
+    y: number;
+    text: string;
+    active: boolean;
+    maxWidth: number;
+  }[]
+>([]);
+const chip = ref<{ x: number; y: number; phoneme: string; deltaMs: number }>();
 
-const phonemeTextStyleSpecs: {
-  light: { fill: string };
-  dark: { fill: string };
-} = {
-  light: { fill: "#252E26" },
-  dark: { fill: "#ccc8c9" },
-};
-let phonemeTextStyles:
-  | { light: PIXI.TextStyle; dark: PIXI.TextStyle }
-  | undefined;
+const toFillStyle = (color: Color) => ({
+  color: color.toRgbNumber(),
+  alpha: color.toAlphaFloat(),
+});
 
 const { mounted } = useMounted();
 
@@ -78,6 +109,18 @@ const canvas = ref<HTMLCanvasElement | null>(null);
 let resizeObserver: ResizeObserver | undefined;
 let canvasWidth: number | undefined;
 let canvasHeight: number | undefined;
+let labelTextContext: CanvasRenderingContext2D | undefined;
+const labelWidths = new Map<string, number>();
+
+const getLabelWidth = (phoneme: string) => {
+  assertNonNullable(labelTextContext);
+  let width = labelWidths.get(phoneme);
+  if (width == undefined) {
+    width = labelTextContext.measureText(phoneme).width;
+    labelWidths.set(phoneme, width);
+  }
+  return width;
+};
 
 // TODO: pixi.js関連の変数をまとめてモジュール化し、isUnmountedなどのフラグを無くす
 let isUnmounted = false;
@@ -86,14 +129,7 @@ let stage: PIXI.Container | undefined;
 
 // 線描画用のGraphicsプール
 const graphics: PIXI.Graphics[] = [];
-// 音素文字をキーとしたTextオブジェクトのプール
-const textsMap = new Map<string, PIXI.Text[]>();
-// Textにマスクを適用するためのContainerのマップ
-const textContainersMap = new Map<PIXI.Text, PIXI.Container>();
-// Textごとのマスク用Graphicsマップ
-const textMasksMap = new Map<PIXI.Text, PIXI.Graphics>();
-
-let lastIsDark: boolean | undefined;
+let bandGraphic: PIXI.Graphics | undefined;
 let requestId: number | undefined;
 let renderInNextFrame = false;
 
@@ -102,250 +138,288 @@ const render = () => {
   assertNonNullable(stage);
   assertNonNullable(canvasWidth);
   assertNonNullable(canvasHeight);
-  assertNonNullable(phonemeTextStyles);
+  assertNonNullable(bandGraphic);
+  assertNonNullable(canvasContainer.value);
 
+  const viewportWidth = canvasWidth;
+  const colors = resolvePhonemeColors(canvasContainer.value, isDark.value);
   const rawTempos = toRaw(tempos.value);
-  const rawPhonemeTimingInfos = toRaw(phonemeTimingInfos.value);
   const preview = previewPhonemeTiming.value;
-  const viewportInfo = props.viewportInfo;
-  const editorFrameRateValue = editorFrameRate.value;
-  const oneFrameSeconds = 1 / editorFrameRateValue;
+  const viewport = props.viewportInfo;
+  const toScreenX = (seconds: number) =>
+    tickToBaseX(secondToTick(seconds, rawTempos, tpqn.value), tpqn.value) *
+      viewport.scaleX -
+    viewport.offsetX;
+  const layout = getPhonemeTimingLayout(canvasHeight);
+  const { noteTop, noteHeight, bandTop, bandHeight, labelTop } = layout;
+  const bandBottom = bandTop + bandHeight;
+  const displayInfos = buildPhonemeDisplayInfos(
+    toRaw(phonemeTimingInfos.value),
+    preview,
+    editorFrameRate.value,
+  );
+  const groups = groupPhonemeDisplayInfos(displayInfos);
+  const target = preview?.type === "move" ? preview : props.hoveredPhoneme;
+  const notePositions = new Map(
+    store.getters.SELECTED_TRACK.notes.map((note) => [note.id, note.position]),
+  );
 
-  const currentTextStyle = isDark.value
-    ? phonemeTextStyles.dark
-    : phonemeTextStyles.light;
+  bandGraphic.clear();
+  bandGraphic
+    .moveTo(0, bandTop)
+    .lineTo(canvasWidth, bandTop)
+    .stroke({ width: 1, ...toFillStyle(colors.rowLine) });
 
-  // テーマが変わるとテキストスタイルも変わるため、既存のテキストオブジェクトを全て破棄する
-  if (lastIsDark != undefined && lastIsDark !== isDark.value) {
-    for (const texts of textsMap.values()) {
-      for (const text of texts) {
-        const container = getOrThrow(textContainersMap, text);
-        stage.removeChild(container);
-        container.destroy(true);
-      }
+  // 帯は境界線の後ろに置き、画面外から続く帯も描く。
+  for (const group of groups) {
+    const startX = toScreenX(group.startTime);
+    const endX = toScreenX(group.endTime);
+    if (endX < 0 || startX > canvasWidth) continue;
+    const gap =
+      endX - startX < PHONEME_TIMING_LAYOUT.narrowBandThresholdPx
+        ? PHONEME_TIMING_LAYOUT.narrowBandGapPx
+        : PHONEME_TIMING_LAYOUT.bandGapPx;
+    const bandColor =
+      group.noteId === target?.noteId ? colors.bandHover : colors.band;
+    const phonemes = group.phonemes.filter((info) => info.phoneme !== "pau");
+    for (const [index, info] of phonemes.entries()) {
+      const cellX = toScreenX(info.startTime);
+      const next = phonemes[index + 1];
+      const cellEndX =
+        next == undefined ? endX - gap : toScreenX(next.startTime);
+      const width = cellEndX - cellX;
+      if (width <= 0) continue;
+      const radius =
+        next == undefined
+          ? Math.min(PHONEME_TIMING_LAYOUT.bandRadiusPx, width / 2)
+          : 0;
+      bandGraphic
+        .moveTo(cellX, bandTop)
+        .lineTo(cellEndX - radius, bandTop)
+        .quadraticCurveTo(cellEndX, bandTop, cellEndX, bandTop + radius)
+        .lineTo(cellEndX, bandBottom - radius)
+        .quadraticCurveTo(cellEndX, bandBottom, cellEndX - radius, bandBottom)
+        .lineTo(cellX, bandBottom)
+        .closePath()
+        .fill(toFillStyle(bandColor));
     }
-    textsMap.clear();
-    textContainersMap.clear();
-    textMasksMap.clear();
   }
-  lastIsDark = isDark.value;
 
-  // 描画用の情報を生成
-  const phonemeDisplayInfos: PhonemeDisplayInfo[] = [];
-  for (const phonemeTimingInfo of rawPhonemeTimingInfos) {
-    // 先頭のpauなどnoteIdが無い音素は描画しない
-    if (phonemeTimingInfo.noteId == undefined) {
+  for (const group of groups) {
+    const startX = toScreenX(group.startTime);
+    // 合成待ちやノート削除直後は、対応するノートが存在しない場合がある。
+    const notePosition = notePositions.get(group.noteId);
+    if (notePosition == undefined) continue;
+    const noteX =
+      tickToBaseX(notePosition, tpqn.value) * viewport.scaleX -
+      viewport.offsetX;
+    if (Math.max(noteX, startX) < 0 || Math.min(noteX, startX) > canvasWidth)
       continue;
+    const dx = Math.abs(noteX - startX);
+    // 同じ時刻のグリッド線と中心を揃える。
+    const noteLineX = Math.round(noteX) - 0.5;
+    const startLineX = Math.round(startX) - 0.5;
+    const bridgeColor =
+      group.noteId === target?.noteId
+        ? preview?.type === "move"
+          ? colors.editing
+          : colors.bridgeHover
+        : colors.bridge;
+    const noteBottom = noteTop + noteHeight;
+    bandGraphic.moveTo(noteLineX, noteBottom);
+    if (dx >= PHONEME_TIMING_LAYOUT.bridgeMinOffsetPx) {
+      const bendY = noteBottom + PHONEME_TIMING_LAYOUT.bridgeBendOffsetPx;
+      bandGraphic.lineTo(noteLineX, bendY).lineTo(startLineX, bendY);
     }
-
-    const isMovePreview =
-      preview?.type === "move" &&
-      preview.noteId === phonemeTimingInfo.noteId &&
-      preview.phonemeIndexInNote === phonemeTimingInfo.phonemeIndexInNote;
-    const isErasePreview =
-      preview?.type === "erase" &&
-      preview.targets.some(
-        (target) =>
-          target.noteId === phonemeTimingInfo.noteId &&
-          target.phonemeIndexInNote === phonemeTimingInfo.phonemeIndexInNote,
-      );
-
-    // 削除プレビュー中は元の位置、移動プレビュー中は元の位置にオフセットを加えた位置、それ以外は編集後の位置を使う
-    let startTime: number;
-    if (isErasePreview) {
-      startTime = phonemeTimingInfo.originalStartTimeSeconds;
-    } else if (isMovePreview) {
-      startTime =
-        phonemeTimingInfo.originalStartTimeSeconds + preview.offsetSeconds;
-    } else {
-      startTime = phonemeTimingInfo.editedStartTimeSeconds;
-    }
-
-    let displayState: PhonemeDisplayState = "default";
-    if (isMovePreview) {
-      displayState = "movePreview";
-    } else if (phonemeTimingInfo.isEdited && !isErasePreview) {
-      displayState = "edited";
-    }
-
-    phonemeDisplayInfos.push({
-      phoneme: phonemeTimingInfo.phoneme,
-      displayState,
-      startTime,
-    });
-  }
-
-  // 音素の順序入れ替わり防止
-  // プレビュー等で音素の位置が変わると前後の音素と順序が入れ替わる可能性があるため、
-  // 表示上は前後の音素との順序を維持するよう制限する
-  for (let i = phonemeDisplayInfos.length - 1; i >= 0; i--) {
-    const phonemeDisplayInfo = phonemeDisplayInfos[i];
-    const nextPhonemeDisplayInfo = getNext(phonemeDisplayInfos, i);
-    if (nextPhonemeDisplayInfo != undefined) {
-      const maxStartTime = nextPhonemeDisplayInfo.startTime - oneFrameSeconds;
-      if (phonemeDisplayInfo.startTime > maxStartTime) {
-        phonemeDisplayInfo.startTime = maxStartTime;
-      }
-    }
-  }
-
-  // 画面外の音素を除外する
-  const cullingMargin = 40;
-  const culledPhonemeDisplayInfos: PhonemeDisplayInfo[] = [];
-  for (const phonemeDisplayInfo of phonemeDisplayInfos) {
-    const phonemeStartTicks = secondToTick(
-      phonemeDisplayInfo.startTime,
-      rawTempos,
-      tpqn.value,
-    );
-    const phonemeStartBaseX = tickToBaseX(phonemeStartTicks, tpqn.value);
-    const phonemeStartX = Math.round(
-      phonemeStartBaseX * viewportInfo.scaleX - viewportInfo.offsetX,
-    );
+    bandGraphic
+      .lineTo(
+        dx < PHONEME_TIMING_LAYOUT.bridgeMinOffsetPx ? noteLineX : startLineX,
+        bandTop,
+      )
+      .stroke({ width: 1, ...toFillStyle(bridgeColor) });
     if (
-      phonemeStartX >= -cullingMargin &&
-      phonemeStartX <= canvasWidth + cullingMargin
+      dx >= PHONEME_TIMING_LAYOUT.notePositionMinOffsetPx &&
+      dx < PHONEME_TIMING_LAYOUT.bridgeMinOffsetPx
     ) {
-      culledPhonemeDisplayInfos.push(phonemeDisplayInfo);
+      for (
+        let y = bandTop;
+        y < bandBottom;
+        y +=
+          PHONEME_TIMING_LAYOUT.notePositionDashPx +
+          PHONEME_TIMING_LAYOUT.notePositionDashGapPx
+      ) {
+        bandGraphic
+          .moveTo(noteLineX, y)
+          .lineTo(
+            noteLineX,
+            Math.min(y + PHONEME_TIMING_LAYOUT.notePositionDashPx, bandBottom),
+          );
+      }
+      bandGraphic.stroke({
+        width: 1,
+        ...toFillStyle(colors.notePosition),
+      });
     }
   }
 
-  // 線のGraphicsが足りなければ追加
-  while (graphics.length < culledPhonemeDisplayInfos.length) {
-    const newGraphic = new PIXI.Graphics();
-    stage.addChild(newGraphic);
-    graphics.push(newGraphic);
-  }
-
-  // 音素文字ごとに必要なテキスト数をカウント
-  const needTextCountMap = new Map<string, number>();
-  for (const phonemeDisplayInfo of culledPhonemeDisplayInfos) {
-    if (phonemeDisplayInfo.phoneme === "pau") {
-      continue;
-    }
-    const currentCount = needTextCountMap.get(phonemeDisplayInfo.phoneme) ?? 0;
-    needTextCountMap.set(phonemeDisplayInfo.phoneme, currentCount + 1);
-  }
-
-  // テキストオブジェクトが足りなければ追加生成
-  for (const [phonemeStr, needTextCount] of needTextCountMap) {
-    let texts = textsMap.get(phonemeStr);
-    if (texts == undefined) {
-      texts = [];
-      textsMap.set(phonemeStr, texts);
-    }
-
-    const currentTextCount = texts.length;
-    for (let i = 0; i < needTextCount - currentTextCount; i++) {
-      const text = new PIXI.Text({ text: phonemeStr, style: currentTextStyle });
-      const container = new PIXI.Container();
-      const mask = new PIXI.Graphics();
-
-      // 隣の音素にはみ出さないようにマスクを設定する
-      container.mask = mask;
-      container.addChild(text);
-      container.addChild(mask);
-      stage.addChild(container);
-
-      texts.push(text);
-      textContainersMap.set(text, container);
-      textMasksMap.set(text, mask);
+  for (const info of displayInfos) {
+    const isTarget =
+      target?.noteId === info.noteId &&
+      target.phonemeIndexInNote === info.phonemeIndexInNote;
+    if (!isTarget) continue;
+    const originalX = toScreenX(info.originalStartTimeSeconds);
+    if (
+      info.displayState !== "default" &&
+      info.startTime !== info.originalStartTimeSeconds
+    ) {
+      const ghostX = Math.round(originalX) - 0.5;
+      for (
+        let y = bandTop;
+        y < bandBottom;
+        y +=
+          PHONEME_TIMING_LAYOUT.ghostDashPx +
+          PHONEME_TIMING_LAYOUT.ghostDashGapPx
+      ) {
+        bandGraphic
+          .moveTo(ghostX, y)
+          .lineTo(
+            ghostX,
+            Math.min(y + PHONEME_TIMING_LAYOUT.ghostDashPx, bandBottom),
+          );
+      }
+      bandGraphic.stroke({ width: 1, ...toFillStyle(colors.ghost) });
     }
   }
 
-  // マスク幅の計算で次の音素のX座標が必要になるため、先に全てのX座標を計算しておく
-  const phonemeStartXArray: number[] = [];
-  for (const phonemeDisplayInfo of culledPhonemeDisplayInfos) {
-    const phonemeStartTicks = secondToTick(
-      phonemeDisplayInfo.startTime,
-      rawTempos,
-      tpqn.value,
-    );
-    const phonemeStartBaseX = tickToBaseX(phonemeStartTicks, tpqn.value);
-    const phonemeStartX = Math.round(
-      phonemeStartBaseX * viewportInfo.scaleX - viewportInfo.offsetX,
-    );
-    phonemeStartXArray.push(phonemeStartX);
+  const visiblePhonemes = groups
+    .flatMap((group) => {
+      const startX = toScreenX(group.startTime);
+      const endX = toScreenX(group.endTime);
+      return group.phonemes.map((info, index) => {
+        const x = toScreenX(info.startTime);
+        const previous = group.phonemes[index - 1];
+        const vowelAfterConsonant =
+          previous != undefined &&
+          previous.phoneme !== "pau" &&
+          !isVowel(previous.phoneme) &&
+          isVowel(info.phoneme);
+        const labelX = vowelAfterConsonant
+          ? Math.max(
+              x,
+              // kyなど複数文字の子音名が、後続の母音で欠けない幅を確保する。
+              toScreenX(previous.startTime) +
+                getLabelWidth(previous.phoneme) +
+                PHONEME_TIMING_LAYOUT.labelSpacingPx,
+            )
+          : x;
+        return {
+          info,
+          x,
+          labelX,
+          showLabel:
+            !vowelAfterConsonant ||
+            endX - startX >= PHONEME_TIMING_LAYOUT.vowelLabelMinSpanPx,
+        };
+      });
+    })
+    .filter(({ x }) => x >= -80 && x <= viewportWidth + 80);
+
+  while (graphics.length < visiblePhonemes.length) {
+    const graphic = new PIXI.Graphics();
+    stage.addChild(graphic);
+    graphics.push(graphic);
   }
 
-  // 未割り当てのTextを管理するため、プールをコピーした一時マップを作る
-  const unassignedTextsMap = new Map<string, PIXI.Text[]>();
-  for (const [phonemeStr, texts] of textsMap) {
-    unassignedTextsMap.set(phonemeStr, [...texts]);
-  }
+  const visibleLabels: typeof labels.value = [];
+  let visibleChip: typeof chip.value;
 
-  // 線とテキストを更新
-  for (let i = 0; i < culledPhonemeDisplayInfos.length; i++) {
-    const phonemeDisplayInfo = culledPhonemeDisplayInfos[i];
-    const phonemeStartX = phonemeStartXArray[i];
-    const nextPhonemeStartX = getNext(phonemeStartXArray, i);
-
-    // 線の更新
+  for (const [i, { info, x, labelX, showLabel }] of visiblePhonemes.entries()) {
+    const isTarget =
+      target?.noteId === info.noteId &&
+      target.phonemeIndexInNote === info.phonemeIndexInNote;
+    const inTargetNote = target?.noteId === info.noteId;
+    const moving = info.displayState === "movePreview";
+    const edited = info.displayState === "edited";
+    const color = moving
+      ? colors.editing
+      : edited
+        ? colors.edited
+        : inTargetNote
+          ? colors.hover
+          : info.phonemeIndexInNote === 0
+            ? colors.head
+            : colors.follow;
+    const lineWidth = moving || edited ? 2 : 1;
+    const lineX = Math.round(x) - 0.5;
     const graphic = graphics[i];
     graphic.renderable = true;
     graphic.clear();
 
-    const themeStyles = isDark.value
-      ? phonemeTimingLineStyles.dark
-      : phonemeTimingLineStyles.light;
-    const lineStyle = themeStyles[phonemeDisplayInfo.displayState];
+    graphic
+      .moveTo(lineX, bandTop)
+      .lineTo(lineX, bandBottom)
+      .stroke({ width: lineWidth, ...toFillStyle(color) });
+    if (moving) {
+      graphic
+        .moveTo(lineX, 0)
+        .lineTo(lineX, bandTop)
+        .moveTo(lineX, bandBottom)
+        .lineTo(lineX, canvasHeight)
+        .stroke({ width: 1, ...toFillStyle(colors.guide) });
+    }
 
-    const lineX =
-      lineStyle.width % 2 === 1 ? phonemeStartX - 0.5 : phonemeStartX;
-    graphic.moveTo(lineX, 0).lineTo(lineX, canvasHeight).stroke({
-      width: lineStyle.width,
-      color: lineStyle.color,
-      alpha: lineStyle.alpha,
-    });
+    if (inTargetNote) {
+      const width = isTarget
+        ? PHONEME_TIMING_LAYOUT.activeHandleWidthPx
+        : PHONEME_TIMING_LAYOUT.handleWidthPx;
+      const height = isTarget
+        ? PHONEME_TIMING_LAYOUT.activeHandleHeightPx
+        : PHONEME_TIMING_LAYOUT.handleHeightPx;
+      graphic
+        .roundRect(
+          lineX - width / 2,
+          bandTop,
+          width,
+          height,
+          PHONEME_TIMING_LAYOUT.handleRadiusPx,
+        )
+        .fill(toFillStyle(color));
+    }
 
-    // テキストの更新
-    if (phonemeDisplayInfo.phoneme !== "pau") {
-      // プールから取得
-      const text = getOrThrow(
-        unassignedTextsMap,
-        phonemeDisplayInfo.phoneme,
-      ).pop();
-      if (text == undefined) {
-        throw new UnreachableError("text is undefined.");
-      }
-      const textContainer = getOrThrow(textContainersMap, text);
-      const textMask = getOrThrow(textMasksMap, text);
-
-      textContainer.renderable = true;
-      textContainer.x = phonemeStartX + 3; // 線から少し右にずらす
-      textContainer.y = props.phonemeTextY;
-
-      // マスク幅の計算
-      let maskWidth = 36;
-      if (nextPhonemeStartX != undefined) {
-        maskWidth = clamp(
-          nextPhonemeStartX - textContainer.x - 1,
-          0,
-          maskWidth,
-        );
-      }
-      const maskHeight = 36;
-
-      // マスクの更新
-      textMask
-        .clear()
-        .rect(0, 0, maskWidth, maskHeight)
-        .fill({ color: 0xffffff });
+    const deltaMs = Math.round(
+      (info.startTime - info.originalStartTimeSeconds) * 1000,
+    );
+    if (info.phoneme !== "pau" && showLabel && !isTarget) {
+      visibleLabels.push({
+        key: `${info.noteId}:${info.phonemeIndexInNote}`,
+        x: labelX,
+        y: labelTop,
+        text: info.phoneme,
+        active: inTargetNote,
+        maxWidth: Math.max(
+          PHONEME_TIMING_LAYOUT.labelMinWidthPx,
+          (visiblePhonemes[i + 1]?.labelX ?? viewportWidth) - labelX,
+        ),
+      });
+    }
+    if (isTarget) {
+      visibleChip = {
+        x: labelX - PHONEME_TIMING_LAYOUT.chipPaddingPx,
+        y:
+          labelTop -
+          (PHONEME_TIMING_LAYOUT.chipHeightPx -
+            PHONEME_TIMING_LAYOUT.labelHeightPx) /
+            2,
+        phoneme: info.phoneme,
+        deltaMs,
+      };
     }
   }
+  labels.value = visibleLabels;
+  chip.value = visibleChip;
 
-  // 余ったGraphicsを非表示
-  for (let i = culledPhonemeDisplayInfos.length; i < graphics.length; i++) {
+  for (let i = visiblePhonemes.length; i < graphics.length; i++)
     graphics[i].renderable = false;
-  }
-  // 余ったTextContainerを非表示
-  for (const texts of unassignedTextsMap.values()) {
-    for (const text of texts) {
-      const textContainer = getOrThrow(textContainersMap, text);
-      textContainer.renderable = false;
-    }
-  }
-
   renderer.render(stage);
 };
 
@@ -359,6 +433,8 @@ watch(
     tpqn,
     editorFrameRate,
     isDark,
+    () => props.hoveredPhoneme,
+    () => store.getters.SELECTED_TRACK.notes,
     () => props.viewportInfo.scaleX,
     () => props.viewportInfo.offsetX,
   ],
@@ -375,25 +451,15 @@ onMounted(async () => {
   assertNonNullable(canvasContainerElement);
   assertNonNullable(canvasElement);
 
+  await document.fonts.load(PHONEME_LABEL_FONT);
+  if (isUnmounted) return;
+  const context = document.createElement("canvas").getContext("2d");
+  assertNonNullable(context);
+  context.font = PHONEME_LABEL_FONT;
+  labelTextContext = context;
+
   canvasWidth = canvasContainerElement.clientWidth;
   canvasHeight = canvasContainerElement.clientHeight;
-
-  // アプリのフォントをPIXIのテキストスタイルに反映する
-  // NOTE: フォントの変更に対応していないが、基本的にフォントが変更されることは少ないので、
-  // 複雑性を下げるためにも対応しない
-  const fontFamily = window.getComputedStyle(canvasContainerElement).fontFamily;
-  phonemeTextStyles = {
-    light: new PIXI.TextStyle({
-      ...phonemeTextStyleSpecs.light,
-      fontFamily,
-      fontSize: 14,
-    }),
-    dark: new PIXI.TextStyle({
-      ...phonemeTextStyleSpecs.dark,
-      fontFamily,
-      fontSize: 14,
-    }),
-  };
 
   renderer = await PIXI.autoDetectRenderer({
     canvas: canvasElement,
@@ -409,8 +475,20 @@ onMounted(async () => {
     return;
   }
   stage = new PIXI.Container();
+  bandGraphic = new PIXI.Graphics();
+  stage.addChild(bandGraphic);
 
   const callback = () => {
+    assertNonNullable(renderer);
+    // 画面移動や表示倍率の変更後も、Canvasを実際の画素密度で描画する。
+    if (renderer.resolution !== window.devicePixelRatio) {
+      renderer.resize(
+        renderer.screen.width,
+        renderer.screen.height,
+        window.devicePixelRatio,
+      );
+      renderInNextFrame = true;
+    }
     if (renderInNextFrame) {
       render();
       renderInNextFrame = false;
@@ -449,16 +527,6 @@ onUnmounted(() => {
     stage?.removeChild(graphic);
     graphic.destroy();
   }
-  for (const texts of textsMap.values()) {
-    for (const text of texts) {
-      const container = getOrThrow(textContainersMap, text);
-      stage?.removeChild(container);
-      container.destroy(true);
-    }
-  }
-  textsMap.clear();
-  textContainersMap.clear();
-  textMasksMap.clear();
   stage?.destroy(true);
   renderer?.destroy({ removeView: true });
   resizeObserver?.disconnect();
@@ -472,5 +540,57 @@ onUnmounted(() => {
   position: relative;
 
   contain: strict; // canvasのサイズが変わるのを無視する
+}
+.phoneme-label,
+.phoneme-chip-name {
+  font: v-bind(PHONEME_LABEL_FONT);
+  line-height: v-bind("`${PHONEME_TIMING_LAYOUT.labelHeightPx}px`");
+}
+
+.phoneme-label {
+  $outline-color: var(--scheme-color-song-phoneme-surface);
+
+  position: absolute;
+  overflow: clip;
+  overflow-clip-margin: 1px;
+  white-space: nowrap;
+  color: var(--scheme-color-song-phoneme-label);
+  text-shadow:
+    -1px -1px 0 $outline-color,
+    1px -1px 0 $outline-color,
+    -1px 1px 0 $outline-color,
+    1px 1px 0 $outline-color,
+    0 -1px 0 $outline-color,
+    0 1px 0 $outline-color,
+    -1px 0 0 $outline-color,
+    1px 0 0 $outline-color;
+
+  &.active {
+    color: var(--scheme-color-song-phoneme-label-hover);
+  }
+}
+
+.phoneme-chip {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: v-bind("`${PHONEME_TIMING_LAYOUT.chipHeightPx}px`");
+  padding: 0 v-bind("`${PHONEME_TIMING_LAYOUT.chipPaddingPx}px`");
+  border: 1px solid var(--scheme-color-song-phoneme-chip-border);
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 6%);
+  background: var(--scheme-color-song-phoneme-surface);
+  color: var(--scheme-color-on-surface);
+  font-size: v-bind("`${PHONEME_TIMING_LAYOUT.labelFontSizePx}px`");
+  line-height: v-bind("`${PHONEME_TIMING_LAYOUT.labelHeightPx}px`");
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.phoneme-chip-delta {
+  font-size: 10px;
+  color: var(--scheme-color-song-phoneme-chip-delta);
+  font-variant-numeric: tabular-nums;
 }
 </style>

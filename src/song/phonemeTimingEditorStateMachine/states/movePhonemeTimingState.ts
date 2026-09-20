@@ -55,24 +55,6 @@ export class MovePhonemeTimingState implements State<
   }
 
   onEnter(context: PhonemeTimingEditorContext) {
-    const targetInfo = context.phonemeTimingInfos.value.find(
-      (info) =>
-        info.noteId === this.noteId &&
-        info.phonemeIndexInNote === this.phonemeIndexInNote,
-    );
-
-    if (targetInfo != undefined) {
-      const initialOffsetSeconds =
-        targetInfo.editedStartTimeSeconds - targetInfo.originalStartTimeSeconds;
-
-      context.previewPhonemeTiming.value = {
-        type: "move",
-        noteId: this.noteId,
-        phonemeIndexInNote: this.phonemeIndexInNote,
-        offsetSeconds: initialOffsetSeconds,
-      };
-    }
-
     context.previewMode.value = "MOVE_PHONEME_TIMING";
     context.cursorState.value = "EW_RESIZE";
 
@@ -81,7 +63,13 @@ export class MovePhonemeTimingState implements State<
         throw new Error("animationContext is undefined.");
       }
       if (this.animationContext.executePreviewProcess) {
-        this.updatePreview(context);
+        // クリックや1px未満の揺れではドラッグ表示に切り替えない。
+        if (
+          context.previewPhonemeTiming.value != undefined ||
+          Math.abs(this.currentPositionX - this.startPositionX) >= 1
+        ) {
+          this.updatePreview(context);
+        }
         this.animationContext.executePreviewProcess = false;
       }
       this.animationContext.previewRequestId =
@@ -97,6 +85,7 @@ export class MovePhonemeTimingState implements State<
 
   process({
     input,
+    context,
     setNextState,
   }: {
     input: PhonemeTimingEditorInput;
@@ -115,16 +104,23 @@ export class MovePhonemeTimingState implements State<
         input.targetArea === "PhonemeTimingArea"
       ) {
         if (input.pointerEvent.type === "pointermove") {
-          this.currentPositionX = input.positionX;
-          this.animationContext.executePreviewProcess = true;
+          if (this.currentPositionX !== input.positionX) {
+            this.currentPositionX = input.positionX;
+            this.animationContext.executePreviewProcess = true;
+          }
         } else if (
           input.pointerEvent.type === "pointerup" &&
           mouseButton === "LEFT_BUTTON"
         ) {
+          this.currentPositionX = input.positionX;
           const pixelDelta = Math.abs(
             this.currentPositionX - this.startPositionX,
           );
           this.shouldApplyPreview = pixelDelta >= 1;
+          // 最後の移動が次フレーム待ちでも、解放位置まで反映して確定する。
+          if (this.shouldApplyPreview) {
+            this.updatePreview(context);
+          }
           setNextState(this.returnStateId, undefined);
         } else if (input.pointerEvent.type === "pointercancel") {
           setNextState(this.returnStateId, undefined);

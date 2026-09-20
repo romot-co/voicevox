@@ -1,3 +1,4 @@
+import { PHONEME_TIMING_HIT_THRESHOLD_PX } from "@/song/phonemeTimingEditorStateMachine/common";
 import type { SetNextState, State } from "@/song/stateMachine";
 import type {
   PhonemeTimingEditorContext,
@@ -137,7 +138,7 @@ export class ErasePhonemeTimingState implements State<
     const tpqn = context.tpqn.value;
 
     // 高速移動対応: 前回と現在の位置の間の範囲で当たり判定
-    const threshold = 4;
+    const threshold = PHONEME_TIMING_HIT_THRESHOLD_PX;
     const minX =
       Math.min(this.prevPositionX, this.currentPositionX) - threshold;
     const maxX =

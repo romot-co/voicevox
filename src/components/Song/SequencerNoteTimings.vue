@@ -1,6 +1,19 @@
 <template>
   <div ref="canvasContainer" class="canvas-container">
     <canvas ref="canvas"></canvas>
+    <div
+      v-for="lyric in lyrics"
+      :key="lyric.id"
+      class="note-lyric"
+      :class="{ active: lyric.id === activeNoteId }"
+      :style="{
+        left: `${lyric.x}px`,
+        top: `${lyric.y}px`,
+        maxWidth: `${lyric.width}px`,
+      }"
+    >
+      {{ lyric.text }}
+    </div>
   </div>
 </template>
 
@@ -11,12 +24,17 @@ import { useStore } from "@/store";
 import { useMounted } from "@/composables/useMounted";
 import { tickToBaseX, type ViewportInfo } from "@/song/viewHelper";
 import { getDefaultLyric } from "@/song/domain";
-import { getOrThrow } from "@/helpers/mapHelper";
-import { clamp } from "@/song/utility";
 import { assertNonNullable } from "@/type/utility";
+import type { NoteId } from "@/type/preload";
+import { createThemeColorResolver } from "@/song/graphics/cssColor";
+import {
+  getPhonemeTimingLayout,
+  PHONEME_TIMING_LAYOUT,
+} from "@/components/Song/SequencerPhonemeTimingEditor/style";
 
 const props = defineProps<{
   viewportInfo: ViewportInfo;
+  activeNoteId?: NoteId;
 }>();
 
 const store = useStore();
@@ -25,37 +43,13 @@ const isDark = computed(() => store.state.currentTheme === "Dark");
 const defaultLyricMode = computed(() => store.state.defaultLyricMode);
 const selectedTrack = computed(() => store.getters.SELECTED_TRACK);
 
-type ColorStyle = {
-  noteFill: number;
-  noteBorder: number;
-};
-
-const noteColorStyles: {
-  light: ColorStyle;
-  dark: ColorStyle;
-} = {
-  light: {
-    noteFill: 0xdfe3e0,
-    noteBorder: 0xffffff,
-  },
-  dark: {
-    noteFill: 0x363936,
-    noteBorder: 0x262728,
-  },
-};
-
-const noteColors = computed(() =>
-  isDark.value ? noteColorStyles.dark : noteColorStyles.light,
-);
-
-const noteTextStyleSpecs: {
-  light: { fill: string };
-  dark: { fill: string };
-} = {
-  light: { fill: "#423e3f" },
-  dark: { fill: "#bfbbbc" },
-};
-let noteTextStyles: { light: PIXI.TextStyle; dark: PIXI.TextStyle } | undefined;
+const resolveNoteColors = createThemeColorResolver({
+  normal: "--scheme-color-song-phoneme-note-tick",
+  active: "--scheme-color-song-phoneme-note-tick-active",
+});
+const lyrics = ref<
+  { id: NoteId; x: number; y: number; width: number; text: string }[]
+>([]);
 
 const selectedTrackNotes = computed(() => selectedTrack.value.notes);
 
@@ -72,10 +66,6 @@ let isUnmounted = false;
 let renderer: PIXI.Renderer | undefined;
 let stage: PIXI.Container | undefined;
 const graphics: PIXI.Graphics[] = [];
-const texts: PIXI.Text[] = [];
-const textContainersMap = new Map<PIXI.Text, PIXI.Container>();
-const textMasksMap = new Map<PIXI.Text, PIXI.Graphics>();
-let lastIsDark: boolean | undefined;
 let requestId: number | undefined;
 let renderInNextFrame = false;
 
@@ -84,34 +74,16 @@ const render = () => {
   assertNonNullable(stage);
   assertNonNullable(canvasWidth);
   assertNonNullable(canvasHeight);
-  assertNonNullable(noteTextStyles);
+  assertNonNullable(canvasContainer.value);
 
   const notes = selectedTrackNotes.value;
   const scaleX = props.viewportInfo.scaleX;
   const offsetXValue = props.viewportInfo.offsetX;
-  const colors = noteColors.value;
-  const currentTextStyle = isDark.value
-    ? noteTextStyles.dark
-    : noteTextStyles.light;
-
-  // テーマが変わるとテキストスタイルも変わるため、既存のテキストオブジェクトを全て破棄する
-  if (lastIsDark != undefined && lastIsDark !== isDark.value) {
-    for (const text of texts) {
-      const container = getOrThrow(textContainersMap, text);
-      stage.removeChild(container);
-      container.destroy(true);
-    }
-    texts.length = 0;
-    textContainersMap.clear();
-    textMasksMap.clear();
-  }
-  lastIsDark = isDark.value;
+  const colors = resolveNoteColors(canvasContainer.value, isDark.value);
+  const { noteTop, noteHeight } = getPhonemeTimingLayout(canvasHeight);
 
   let graphicsIndex = 0;
-  let textIndex = 0;
-
-  // マスク計算で使うテキストの位置情報
-  const textPositions: { textX: number; text: PIXI.Text }[] = [];
+  const visibleLyrics: typeof lyrics.value = [];
 
   // 各ノートを描画
   for (const note of notes) {
@@ -123,13 +95,13 @@ const render = () => {
       rawNote.position + rawNote.duration,
       tpqn.value,
     );
-    const screenStartX = Math.round(baseStartX * scaleX - offsetXValue);
-    const screenEndX = Math.round(baseEndX * scaleX - offsetXValue);
-    const screenWidth = screenEndX - screenStartX;
+    const screenStartX = baseStartX * scaleX - offsetXValue;
+    const screenEndX = baseEndX * scaleX - offsetXValue;
+    const screenWidth = Math.max(2, screenEndX - screenStartX - 1);
 
     // 画面外のノートは描画しない
     const noteRight = screenStartX + screenWidth;
-    if (screenWidth < 1 || noteRight < 0 || screenStartX > canvasWidth) {
+    if (noteRight < 0 || screenStartX > canvasWidth) {
       continue;
     }
 
@@ -142,78 +114,46 @@ const render = () => {
     const graphic = graphics[graphicsIndex];
     graphicsIndex++;
 
-    // ノートの長方形を描画
-    // 選択中のノートも同じ色で描画する
+    const color =
+      props.activeNoteId === note.id ? colors.active : colors.normal;
     graphic.renderable = true;
     graphic.clear();
+    // グリッド線の中心はround(x) - 0.5なので、幅1pxの左端を1px戻す。
     graphic
-      .roundRect(screenStartX - 0.5, 0.5, screenWidth, canvasHeight - 1, 5)
-      .fill({ color: colors.noteFill, alpha: 1 })
-      .stroke({ width: 1, color: colors.noteBorder, alpha: 1 });
+      .rect(
+        Math.round(screenStartX) - 1,
+        noteTop + noteHeight - PHONEME_TIMING_LAYOUT.noteTickHeightPx,
+        1,
+        PHONEME_TIMING_LAYOUT.noteTickHeightPx,
+      )
+      .fill({
+        color: color.toRgbNumber(),
+        alpha: color.toAlphaFloat(),
+      });
 
-    // ノートの歌詞をテキストで描画
-    const lyric =
-      rawNote.lyric ??
-      getDefaultLyric(rawNote.noteNumber, defaultLyricMode.value);
-    if (textIndex >= texts.length) {
-      const newText = new PIXI.Text({ text: "", style: currentTextStyle });
-      newText.anchor.set(0, 0.5);
-      const container = new PIXI.Container();
-      const mask = new PIXI.Graphics();
+    // 短いノートでも開始位置は残し、歌詞の重なりだけを避ける。
+    if (screenWidth < PHONEME_TIMING_LAYOUT.lyricMinWidthPx) continue;
 
-      container.mask = mask;
-      container.addChild(newText);
-      container.addChild(mask);
-      stage.addChild(container);
-      texts.push(newText);
-      textContainersMap.set(newText, container);
-      textMasksMap.set(newText, mask);
-    }
-    const text = texts[textIndex];
-    textIndex++;
-
-    text.text = lyric;
-
-    const textContainer = getOrThrow(textContainersMap, text);
-    textContainer.renderable = true;
-    textContainer.x = screenStartX + 3;
-    textContainer.y = canvasHeight / 2;
-
-    textPositions.push({ textX: textContainer.x, text });
+    visibleLyrics.push({
+      id: note.id,
+      x: screenStartX,
+      y:
+        noteTop +
+        noteHeight -
+        PHONEME_TIMING_LAYOUT.noteTickHeightPx -
+        PHONEME_TIMING_LAYOUT.labelHeightPx,
+      width: screenWidth,
+      text:
+        rawNote.lyric ??
+        getDefaultLyric(rawNote.noteNumber, defaultLyricMode.value),
+    });
   }
-
-  // 各テキストが次のテキストと重ならないようにマスクをかける
-  for (let i = 0; i < textPositions.length; i++) {
-    const { textX, text } = textPositions[i];
-    const textMask = getOrThrow(textMasksMap, text);
-
-    // デフォルトのマスク幅
-    let maskWidth = 36;
-
-    // 次のテキストがある場合、その位置までに制限
-    if (i + 1 < textPositions.length) {
-      const nextTextX = textPositions[i + 1].textX;
-      maskWidth = clamp(nextTextX - textX, 0, maskWidth);
-    }
-
-    const maskHeight = 36;
-
-    textMask
-      .clear()
-      .rect(0, -maskHeight / 2, maskWidth, maskHeight)
-      .fill({ color: 0xffffff });
-  }
+  lyrics.value = visibleLyrics;
 
   // 未使用のグラフィックスとテキストを非表示
   for (let i = graphicsIndex; i < graphics.length; i++) {
     graphics[i].renderable = false;
   }
-  for (let i = textIndex; i < texts.length; i++) {
-    const text = texts[i];
-    const textContainer = getOrThrow(textContainersMap, text);
-    textContainer.renderable = false;
-  }
-
   renderer.render(stage);
 };
 
@@ -225,6 +165,7 @@ watch(
     tpqn,
     defaultLyricMode,
     isDark,
+    () => props.activeNoteId,
     () => props.viewportInfo.scaleX,
     () => props.viewportInfo.offsetX,
   ],
@@ -244,23 +185,6 @@ onMounted(async () => {
   canvasWidth = canvasContainerElement.clientWidth;
   canvasHeight = canvasContainerElement.clientHeight;
 
-  // アプリのフォントをPIXIのテキストスタイルに反映する
-  // NOTE: フォントの変更に対応していないが、基本的にフォントが変更されることは少ないので、
-  // 複雑性を下げるためにも対応しない
-  const fontFamily = window.getComputedStyle(canvasContainerElement).fontFamily;
-  noteTextStyles = {
-    light: new PIXI.TextStyle({
-      ...noteTextStyleSpecs.light,
-      fontFamily,
-      fontSize: 14,
-    }),
-    dark: new PIXI.TextStyle({
-      ...noteTextStyleSpecs.dark,
-      fontFamily,
-      fontSize: 14,
-    }),
-  };
-
   renderer = await PIXI.autoDetectRenderer({
     canvas: canvasElement,
     backgroundAlpha: 0,
@@ -277,6 +201,16 @@ onMounted(async () => {
   stage = new PIXI.Container();
 
   const callback = () => {
+    assertNonNullable(renderer);
+    // 画面移動や表示倍率の変更後も、Canvasを実際の画素密度で描画する。
+    if (renderer.resolution !== window.devicePixelRatio) {
+      renderer.resize(
+        renderer.screen.width,
+        renderer.screen.height,
+        window.devicePixelRatio,
+      );
+      renderInNextFrame = true;
+    }
     if (renderInNextFrame) {
       render();
       renderInNextFrame = false;
@@ -314,13 +248,6 @@ onUnmounted(() => {
     stage?.removeChild(graphic);
     graphic.destroy();
   }
-  for (const text of texts) {
-    const container = getOrThrow(textContainersMap, text);
-    stage?.removeChild(container);
-    container.destroy(true);
-  }
-  textContainersMap.clear();
-  textMasksMap.clear();
   stage?.destroy(true);
   renderer?.destroy({ removeView: true });
   resizeObserver?.disconnect();
@@ -329,10 +256,24 @@ onUnmounted(() => {
 
 <style scoped lang="scss">
 .canvas-container {
+  font-family: "Unhinted Rounded M+ 1p Medium", sans-serif;
   overflow: hidden;
   pointer-events: none;
   position: relative;
 
   contain: strict; // canvasのサイズが変わるのを無視する
+}
+.note-lyric {
+  position: absolute;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  color: var(--scheme-color-song-phoneme-note-tick);
+
+  &.active {
+    color: var(--scheme-color-song-phoneme-note-tick-active);
+  }
 }
 </style>
