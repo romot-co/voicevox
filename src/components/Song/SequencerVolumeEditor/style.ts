@@ -9,11 +9,14 @@ export const VOLUME_EDITOR_LAYOUT = {
   endpointMergeDistancePx: 8,
   lyricMinWidthPx: 16,
   noteLaneHeightPx: 24,
+  zeroLineDashPx: 5,
+  zeroLineGapPx: 4,
 } as const;
 
 export const VOLUME_EDITOR_LINE_WIDTH = {
   volume: 2,
   hoveredVolume: 2,
   endpoint: 2,
-  tooltipGuide: 1,
+  zeroLine: 1,
+  guide: 1,
 } as const;

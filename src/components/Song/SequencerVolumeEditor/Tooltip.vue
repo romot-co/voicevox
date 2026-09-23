@@ -1,10 +1,5 @@
 <template>
   <div
-    v-if="state != undefined && showGuide"
-    class="volume-value-guide-line"
-    :style="guideLineStyle"
-  ></div>
-  <div
     v-if="state != undefined"
     class="volume-value-tooltip"
     :style="tooltipStyle"
@@ -15,7 +10,7 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
-import { VOLUME_EDITOR_LAYOUT, VOLUME_EDITOR_LINE_WIDTH } from "./style";
+import { VOLUME_EDITOR_LAYOUT } from "./style";
 import { clamp } from "@/song/utility";
 
 defineOptions({
@@ -30,7 +25,6 @@ type VolumeEditorTooltipState = {
 
 const props = defineProps<{
   state?: VolumeEditorTooltipState;
-  showGuide: boolean;
   viewportWidth?: number;
   viewportHeight?: number;
 }>();
@@ -71,32 +65,10 @@ const tooltipStyle = computed(() => {
     top: `${top}px`,
   };
 });
-
-const guideLineStyle = computed(() => {
-  const tooltip = props.state;
-  if (tooltip == undefined) {
-    return undefined;
-  }
-  return {
-    left: `${VOLUME_EDITOR_LAYOUT.keyColumnWidthPx}px`,
-    top: `${tooltip.pointerY}px`,
-  };
-});
 </script>
 
 <style scoped lang="scss">
 @use "@/styles/v2/variables" as vars;
-
-.volume-value-guide-line {
-  position: absolute;
-  right: 0;
-  z-index: 2;
-  height: 0;
-  border-top: v-bind("`${VOLUME_EDITOR_LINE_WIDTH.tooltipGuide}px`") solid
-    var(--scheme-color-song-volume-value-guide-line);
-  transform: translateY(-0.5px);
-  pointer-events: none;
-}
 
 .volume-value-tooltip {
   position: absolute;

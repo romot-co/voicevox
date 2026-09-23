@@ -27,40 +27,15 @@
           }}</span>
         </div>
       </div>
-      <svg class="volume-zero-line">
-        <line x1="0" x2="100%" :y1="zeroLinePosition" :y2="zeroLinePosition" />
-      </svg>
     </div>
     <canvas ref="canvas" class="volume-editor-canvas" />
-    <svg class="volume-annotations" aria-hidden="true">
-      <circle
-        v-if="hoverPoint != undefined"
-        class="volume-hover-point"
-        :cx="hoverPoint.x"
-        :cy="hoverPoint.y"
-        :r="VOLUME_EDITOR_LAYOUT.hoverPointRadiusPx"
-      />
-      <line
-        v-if="verticalGuide != undefined"
-        class="volume-vertical-guide"
-        :x1="verticalGuide.x"
-        :x2="verticalGuide.x"
-        :y1="VOLUME_EDITOR_LAYOUT.noteLaneHeightPx"
-        :y2="verticalGuide.endY"
-      />
-    </svg>
     <div
       class="volume-editor-area"
       @pointerdown="onSurfacePointerDown"
       @pointermove="onSurfacePointerMove"
       @pointerleave="onSurfacePointerLeave"
     ></div>
-    <Tooltip
-      :state="tooltipState"
-      :showGuide="props.previewMode === 'VOLUME_DRAW'"
-      :viewportWidth
-      :viewportHeight
-    />
+    <Tooltip :state="tooltipState" :viewportWidth :viewportHeight />
     <div class="volume-grid-labels" aria-hidden="true">
       <div class="volume-grid-label" :style="{ top: zeroLinePosition }">0</div>
     </div>
@@ -96,6 +71,7 @@ import {
   buildVolumeSegments,
   VolumeEditorRenderer,
   type VolumeEditorBaseXRange,
+  type VolumeEditPosition,
 } from "./renderer";
 import { VOLUME_EDITOR_LAYOUT } from "./style";
 import ContextMenu, {
@@ -111,12 +87,7 @@ import {
   type ViewportInfo,
 } from "@/song/viewHelper";
 import { createThemeColorResolver } from "@/song/graphics/cssColor";
-import {
-  volumeBaseXToScreenX,
-  volumeNormalizedYToScreenY,
-  type VolumePoint,
-  type VolumeViewInfo,
-} from "@/song/graphics/volumeLine";
+import type { VolumeViewInfo } from "@/song/graphics/volumeLine";
 import type { VolumeEditMode } from "@/song/volumeEditMode";
 import type {
   VolumeEditableFrameRange,
@@ -175,6 +146,9 @@ const resolveVolumeLineColors = createThemeColorResolver({
   areaContainer: "--scheme-color-song-volume-area-container",
   endpointContainer: "--scheme-color-song-volume-endpoint-container",
   erasePreviewOverlay: "--scheme-color-song-volume-erase-preview",
+  zeroLine: "--scheme-color-song-volume-zero-line",
+  hoverPoint: "--scheme-color-song-volume-indicator",
+  guide: "--scheme-color-song-volume-value-guide-line",
 });
 
 const canvas = ref<HTMLCanvasElement | null>(null);
@@ -255,61 +229,42 @@ const feedbackBaseXRange = computed<VolumeEditorBaseXRange | undefined>(() => {
   };
 });
 
-const hoveredCurvePoint = computed<VolumePoint | undefined>(() => {
+// ポインタ位置ではなく編集するフレームと値に合わせ、ガイドと編集結果がずれないようにする
+const editPosition = computed<VolumeEditPosition | undefined>(() => {
   const frame = props.highlightedFrame;
+  if (props.uiLocked || frame == undefined) {
+    return undefined;
+  }
+  if (props.previewMode === "VOLUME_DRAW") {
+    const data = props.tooltipData;
+    if (data == undefined) {
+      return undefined;
+    }
+    // 描画中は書き込む値を示す。ガイドは静止中だと拍の罫線と紛れるため、描画中だけ引く
+    return {
+      baseX: frameToBaseX(frame),
+      normalizedY: volumeValueScale.value.dbToNormalizedY(data.db),
+      showPoint: false,
+      showGuides: true,
+    };
+  }
   if (
     props.previewMode !== "IDLE" ||
-    props.uiLocked ||
-    props.highlightedEditableRange == undefined ||
-    frame == undefined
+    !props.showDrawFeedback ||
+    props.highlightedEditableRange == undefined
   ) {
     return undefined;
   }
   const value = props.effectiveFramewise[frame];
-  if (value == null) return undefined;
-  // ポインターの高さではなく、実際に編集するフレームのカーブ上に表示する。
+  if (value == null) {
+    return undefined;
+  }
+  // ホバー中は、そのフレームの今の値をカーブ上に示す
   return {
     baseX: frameToBaseX(frame),
     normalizedY: volumeValueScale.value.dbToNormalizedY(value),
-  };
-});
-
-const hoverPoint = computed(() => {
-  const point = hoveredCurvePoint.value;
-  const view = viewInfo.value;
-  if (!props.showDrawFeedback || point == undefined || view == undefined)
-    return undefined;
-  const x = volumeBaseXToScreenX(point.baseX, view);
-  if (x < view.leftPadding || x > view.viewportWidth) return undefined;
-  return {
-    x,
-    y: volumeNormalizedYToScreenY(point.normalizedY, view.viewportHeight),
-  };
-});
-const verticalGuide = computed(() => {
-  if (props.uiLocked) return undefined;
-  if (props.previewMode === "VOLUME_DRAW") {
-    const data = props.tooltipData;
-    if (data == undefined) return undefined;
-    // 描画中はホバー点を出さないので、横ガイドとの交点まで伸ばす。
-    return {
-      x: data.pointerX,
-      endY: Math.max(VOLUME_EDITOR_LAYOUT.noteLaneHeightPx, data.pointerY),
-    };
-  }
-  const point = hoveredCurvePoint.value;
-  const view = viewInfo.value;
-  if (point == undefined || view == undefined) return undefined;
-  const pointY = volumeNormalizedYToScreenY(
-    point.normalizedY,
-    view.viewportHeight,
-  );
-  // ホバー点があるときだけ、線が点に食い込まないよう半径ぶん手前で止める。
-  const gap =
-    hoverPoint.value == undefined ? 0 : VOLUME_EDITOR_LAYOUT.hoverPointRadiusPx;
-  return {
-    x: volumeBaseXToScreenX(point.baseX, view),
-    endY: Math.max(VOLUME_EDITOR_LAYOUT.noteLaneHeightPx, pointY - gap),
+    showPoint: true,
+    showGuides: false,
   };
 });
 
@@ -361,6 +316,9 @@ const getVolumeEditorLineColors = (element: HTMLElement) => {
     areaContainer: colors.areaContainer,
     endpointContainer: colors.endpointContainer,
     erasePreviewOverlay: colors.erasePreviewOverlay,
+    zeroLine: colors.zeroLine,
+    hoverPoint: colors.hoverPoint,
+    guide: colors.guide,
   };
 };
 
@@ -441,7 +399,14 @@ const onWheel = (event: WheelEvent) => {
   }
 };
 
-const updateRenderer = (renderImmediately = false) => {
+const rendererCurve = computed(() => ({
+  volumeSegments: volumeSegments.value,
+  feedbackRange: feedbackBaseXRange.value,
+  erasePreviewRanges: erasePreviewBaseXRanges.value,
+  valueScale: volumeValueScale.value,
+}));
+
+const updateRendererView = (renderImmediately = false) => {
   const view = viewInfo.value;
   const containerElement = canvasContainer.value;
   if (
@@ -451,33 +416,18 @@ const updateRenderer = (renderImmediately = false) => {
   ) {
     return;
   }
-  renderer.update(
-    {
-      viewInfo: view,
-      volumeSegments: volumeSegments.value,
-      feedbackRange: feedbackBaseXRange.value,
-      erasePreviewRanges: erasePreviewBaseXRanges.value,
-      valueScale: volumeValueScale.value,
-      colors: getVolumeEditorLineColors(containerElement),
-    },
+  renderer.updateView(
+    { viewInfo: view, colors: getVolumeEditorLineColors(containerElement) },
     renderImmediately,
   );
 };
 
-watch(
-  [
-    () => props.viewportInfo.scaleX,
-    () => props.viewportInfo.offsetX,
-    () => props.previewMode,
-    () => props.isDark,
-    volumeSegments,
-    feedbackBaseXRange,
-    erasePreviewBaseXRanges,
-    viewportWidth,
-    viewportHeight,
-  ],
-  () => updateRenderer(),
+// 強調線の色はpreviewModeで切り替わるため、表示の更新に含める
+watch([viewInfo, () => props.previewMode, () => props.isDark], () =>
+  updateRendererView(),
 );
+watch(rendererCurve, (curve) => renderer?.updateCurve(curve));
+watch(editPosition, (position) => renderer?.updateEditPosition(position));
 
 onMounted(async () => {
   const containerElement = canvasContainer.value;
@@ -501,7 +451,9 @@ onMounted(async () => {
     return;
   }
 
-  updateRenderer(true);
+  renderer.updateCurve(rendererCurve.value);
+  renderer.updateEditPosition(editPosition.value);
+  updateRendererView(true);
   resizeObserver = new ResizeObserver(() => {
     const width = containerElement.clientWidth;
     const height = containerElement.clientHeight;
@@ -516,7 +468,7 @@ onMounted(async () => {
     viewportWidth.value = width;
     viewportHeight.value = height;
     renderer?.resize(width, height);
-    updateRenderer(true);
+    updateRendererView(true);
   });
   resizeObserver.observe(containerElement);
 });
@@ -548,36 +500,6 @@ onUnmounted(() => {
     width: 100%;
     height: 100%;
   }
-}
-
-// 線の中心を表示スケールの0dB位置に置き、Canvasの基準と一致させる。
-.volume-zero-line {
-  position: absolute;
-  inset: 0;
-  stroke: var(--scheme-color-song-volume-zero-line);
-  stroke-width: 1px;
-  stroke-dasharray: 5 4;
-}
-
-.volume-annotations {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  z-index: 3;
-  clip-path: inset(
-    0 0 0 v-bind("`${VOLUME_EDITOR_LAYOUT.keyColumnWidthPx}px`")
-  );
-}
-
-.volume-hover-point {
-  fill: var(--scheme-color-song-volume-indicator);
-}
-
-.volume-vertical-guide {
-  stroke: var(--scheme-color-song-volume-value-guide-line);
-  stroke-width: 1px;
 }
 
 .volume-lane-notes {
