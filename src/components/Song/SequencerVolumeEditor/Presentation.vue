@@ -40,15 +40,6 @@
         :cy="hoverPoint.y"
         :r="VOLUME_EDITOR_LAYOUT.hoverPointRadiusPx"
       />
-      <text
-        v-for="label in endpointLabels"
-        :key="label.x"
-        :x="label.x + 10"
-        :y="label.y - 8"
-        class="volume-endpoint-label"
-      >
-        {{ label.text }}
-      </text>
       <line
         v-if="verticalGuide != undefined"
         class="volume-vertical-guide"
@@ -103,7 +94,6 @@ import {
 } from "./useVolumeEditorPointerInput";
 import {
   buildVolumeSegments,
-  buildVolumeEndpointNodes,
   VolumeEditorRenderer,
   type VolumeEditorBaseXRange,
 } from "./renderer";
@@ -147,7 +137,6 @@ defineOptions({
 const props = defineProps<{
   viewportInfo: ViewportInfo;
   effectiveFramewise: readonly VolumeEditValue[];
-  editableFrameRanges: readonly VolumeEditableFrameRange[];
   notes: readonly Note[];
   previewEraseRanges: readonly VolumeEditFrameRange[];
   tempos: Tempo[];
@@ -354,29 +343,6 @@ const laneNotes = computed(() => {
         note.x + note.width >= 0 &&
         note.x < view.viewportWidth - view.leftPadding,
     );
-});
-
-const endpointLabels = computed(() => {
-  const view = viewInfo.value;
-  if (view == undefined) return [];
-  const startValues = new Map(
-    props.editableFrameRanges.map((range) => [
-      frameToBaseX(range.startFrame),
-      props.effectiveFramewise[range.startFrame],
-    ]),
-  );
-  return buildVolumeEndpointNodes(volumeSegments.value, view).flatMap(
-    (node) => {
-      // 統合点ではラベルを省き、実際の区間先頭にだけ表示する。
-      if (node.startBaseX !== node.endBaseX) return [];
-      const value = startValues.get(node.startBaseX);
-      if (value == null) return [];
-      const label = volumeValueScale.value.formatDbLabel(value);
-      // 0dBは基準線の位置そのものなので、ラベルは省く。
-      if (label === volumeValueScale.value.formatDbLabel(0)) return [];
-      return [{ x: node.x, y: node.y, text: `${label} dB` }];
-    },
-  );
 });
 
 const erasePreviewBaseXRanges = computed<VolumeEditorBaseXRange[]>(() =>
@@ -607,11 +573,6 @@ onUnmounted(() => {
 
 .volume-hover-point {
   fill: var(--scheme-color-song-volume-indicator);
-}
-
-.volume-endpoint-label {
-  font-size: 10px;
-  fill: var(--scheme-color-song-volume-endpoint-label);
 }
 
 .volume-vertical-guide {

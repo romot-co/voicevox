@@ -2,7 +2,6 @@
   <Presentation
     :viewportInfo="props.viewportInfo"
     :effectiveFramewise
-    :editableFrameRanges
     :notes
     :previewEraseRanges
     :tempos
