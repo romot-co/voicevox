@@ -18,6 +18,7 @@ describe("DrawVolumeState", () => {
     const state = new DrawVolumeIdleState();
 
     state.onEnter(context);
+    expect(context.showDrawFeedback.value).toBe(false);
     state.process({
       input: {
         type: "pointerEvent",
@@ -30,6 +31,7 @@ describe("DrawVolumeState", () => {
     });
 
     expect(context.cursorState.value).toBe("DRAW");
+    expect(context.showDrawFeedback.value).toBe(true);
     expect(context.highlightedFrame.value).toBe(10);
     expect(context.hoverPointer.value).toEqual({ x: 100, y: 60 });
 
@@ -45,6 +47,7 @@ describe("DrawVolumeState", () => {
     });
 
     expect(context.cursorState.value).toBe("NOT_ALLOWED");
+    expect(context.showDrawFeedback.value).toBe(false);
     expect(context.highlightedFrame.value).toBeUndefined();
     expect(context.hoverPointer.value).toBeUndefined();
 
@@ -60,6 +63,7 @@ describe("DrawVolumeState", () => {
     });
 
     expect(context.cursorState.value).toBe("UNSET");
+    expect(context.showDrawFeedback.value).toBe(false);
     expect(context.highlightedFrame.value).toBeUndefined();
     expect(context.hoverPointer.value).toBeUndefined();
   });
@@ -83,6 +87,7 @@ describe("DrawVolumeState", () => {
     });
 
     state.onEnter(context);
+    expect(context.showDrawFeedback.value).toBe(true);
     expect(context.highlightedFrame.value).toBe(10);
 
     state.process({
@@ -99,6 +104,7 @@ describe("DrawVolumeState", () => {
     expect(context.highlightedFrame.value).toBe(120);
 
     state.onExit(context);
+    expect(context.showDrawFeedback.value).toBe(false);
     expect(context.highlightedFrame.value).toBeUndefined();
   });
 
@@ -198,6 +204,7 @@ function createContext(
     previewVolumeEdit: ref(undefined),
     previewMode: ref("IDLE"),
     cursorState: ref("UNSET"),
+    showDrawFeedback: ref(false),
     tooltipData: ref(undefined),
     highlightedFrame: ref(undefined),
     hoverPointer: ref(undefined),

@@ -28,6 +28,7 @@ export const useVolumeEditorStateMachine = (
     previewVolumeEdit: shallowRef<VolumePreviewEdit | undefined>(undefined),
     previewMode: ref<VolumeEditorPreviewMode>("IDLE"),
     cursorState: ref<CursorState>("UNSET"),
+    showDrawFeedback: ref(false),
     tooltipData: ref<VolumeEditorTooltipData>(),
     highlightedFrame: ref<number>(),
     hoverPointer: ref<{ x: number; y: number }>(),
@@ -66,6 +67,7 @@ export const useVolumeEditorStateMachine = (
     volumePreviewEdit: computed(() => refs.previewVolumeEdit.value),
     previewMode: computed(() => refs.previewMode.value),
     cursorState: computed(() => refs.cursorState.value),
+    showDrawFeedback: computed(() => refs.showDrawFeedback.value),
     // ホバー中は、ステートマシンが保持するフレームと座標から、その時点のカーブの値で導く
     tooltipData: computed<VolumeEditorTooltipData | undefined>(() => {
       if (refs.tooltipData.value != undefined) {

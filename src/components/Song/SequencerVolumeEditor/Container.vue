@@ -10,6 +10,7 @@
     :editorFrameRate
     :previewMode
     :cursorState
+    :showDrawFeedback
     :tooltipData
     :highlightedFrame
     :highlightedEditableRange
@@ -98,6 +99,7 @@ const {
   stateMachineProcess,
   previewMode,
   cursorState,
+  showDrawFeedback,
   tooltipData,
   highlightedFrame,
 } = useVolumeEditorStateMachine(store, {

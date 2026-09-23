@@ -47,6 +47,11 @@ export type VolumeEditorRefs = {
   readonly previewVolumeEdit: Ref<VolumePreviewEdit | undefined>;
   readonly previewMode: Ref<VolumeEditorPreviewMode>;
   readonly cursorState: Ref<CursorState>;
+  /**
+   * 描画ツールの区間強調とホバー点を表示するか。
+   * cursorStateはカーソルの見た目専用なので、表示条件はこちらで持つ。
+   */
+  readonly showDrawFeedback: Ref<boolean>;
   readonly tooltipData: Ref<VolumeEditorTooltipData | undefined>;
   /**
    * ハイライトする編集可能区間を指し示すフレーム。

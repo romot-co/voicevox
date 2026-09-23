@@ -30,6 +30,7 @@ describe("EraseVolumeState", () => {
     });
 
     expect(context.cursorState.value).toBe("ERASE");
+    expect(context.showDrawFeedback.value).toBe(false);
     expect(context.highlightedFrame.value).toBe(10);
     expect(context.hoverPointer.value).toEqual({ x: 100, y: 50 });
 
@@ -103,6 +104,7 @@ function createContext(): VolumeEditorContext {
     previewVolumeEdit: ref(undefined),
     previewMode: ref("IDLE"),
     cursorState: ref("UNSET"),
+    showDrawFeedback: ref(false),
     tooltipData: ref(undefined),
     highlightedFrame: ref(undefined),
     hoverPointer: ref(undefined),

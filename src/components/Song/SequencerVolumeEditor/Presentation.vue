@@ -155,6 +155,7 @@ const props = defineProps<{
   editorFrameRate: number;
   previewMode: VolumeEditorPreviewMode;
   cursorState: CursorState;
+  showDrawFeedback: boolean;
   tooltipData: VolumeEditorTooltipData | undefined;
   highlightedFrame: number | undefined;
   highlightedEditableRange: VolumeEditableFrameRange | undefined;
@@ -256,7 +257,7 @@ const volumeSegments = computed(() =>
 const feedbackBaseXRange = computed<VolumeEditorBaseXRange | undefined>(() => {
   const range = props.highlightedEditableRange;
   // ステートマシンが描画できると判断した位置だけを強調する。
-  if (props.cursorState !== "DRAW" || props.uiLocked || range == undefined) {
+  if (!props.showDrawFeedback || props.uiLocked || range == undefined) {
     return undefined;
   }
   return {
@@ -287,7 +288,7 @@ const hoveredCurvePoint = computed<VolumePoint | undefined>(() => {
 const hoverPoint = computed(() => {
   const point = hoveredCurvePoint.value;
   const view = viewInfo.value;
-  if (props.cursorState !== "DRAW" || point == undefined || view == undefined)
+  if (!props.showDrawFeedback || point == undefined || view == undefined)
     return undefined;
   const x = volumeBaseXToScreenX(point.baseX, view);
   if (x < view.leftPadding || x > view.viewportWidth) return undefined;

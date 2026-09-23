@@ -16,6 +16,7 @@ export class EraseVolumeIdleState implements State<
 
   onEnter(context: VolumeEditorContext) {
     context.cursorState.value = "UNSET";
+    context.showDrawFeedback.value = false;
     context.tooltipData.value = undefined;
     context.highlightedFrame.value = undefined;
     context.hoverPointer.value = undefined;
@@ -73,6 +74,7 @@ export class EraseVolumeIdleState implements State<
 
   onExit(context: VolumeEditorContext) {
     context.cursorState.value = "UNSET";
+    context.showDrawFeedback.value = false;
     context.tooltipData.value = undefined;
     context.highlightedFrame.value = undefined;
     context.hoverPointer.value = undefined;
