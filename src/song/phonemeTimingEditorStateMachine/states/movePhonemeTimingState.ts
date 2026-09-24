@@ -55,6 +55,11 @@ export class MovePhonemeTimingState implements State<
   }
 
   onEnter(context: PhonemeTimingEditorContext) {
+    // 押下から解放後まで、操作中の境界のホバー表示を途切れさせない
+    context.hoveredPhoneme.value = {
+      noteId: this.noteId,
+      phonemeIndexInNote: this.phonemeIndexInNote,
+    };
     context.previewMode.value = "MOVE_PHONEME_TIMING";
     context.cursorState.value = "EW_RESIZE";
 
@@ -104,10 +109,8 @@ export class MovePhonemeTimingState implements State<
         input.targetArea === "PhonemeTimingArea"
       ) {
         if (input.pointerEvent.type === "pointermove") {
-          if (this.currentPositionX !== input.positionX) {
-            this.currentPositionX = input.positionX;
-            this.animationContext.executePreviewProcess = true;
-          }
+          this.currentPositionX = input.positionX;
+          this.animationContext.executePreviewProcess = true;
         } else if (
           input.pointerEvent.type === "pointerup" &&
           mouseButton === "LEFT_BUTTON"
@@ -117,7 +120,7 @@ export class MovePhonemeTimingState implements State<
             this.currentPositionX - this.startPositionX,
           );
           this.shouldApplyPreview = pixelDelta >= 1;
-          // 最後の移動が次フレーム待ちでも、解放位置まで反映して確定する。
+          // 動かしてすぐ離すとプレビューが未作成のことがあるため、解放位置で作ってから確定する。
           if (this.shouldApplyPreview) {
             this.updatePreview(context);
           }

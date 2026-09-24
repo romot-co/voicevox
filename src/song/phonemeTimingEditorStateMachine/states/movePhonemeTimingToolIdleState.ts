@@ -1,4 +1,3 @@
-import { PHONEME_TIMING_HIT_THRESHOLD_PX } from "@/song/phonemeTimingEditorStateMachine/common";
 import type { SetNextState, State } from "@/song/stateMachine";
 import type {
   PhonemeTimingEditorContext,
@@ -61,7 +60,7 @@ export class MovePhonemeTimingToolIdleState implements State<
     }
 
     // ヒットテスト
-    const threshold = PHONEME_TIMING_HIT_THRESHOLD_PX;
+    const threshold = 4;
     let nearest: PhonemeTimingInfo | undefined;
     let minDistance: number | undefined = undefined;
     for (const phonemeTimingInfo of phonemeTimingInfos) {
@@ -132,6 +131,8 @@ export class MovePhonemeTimingToolIdleState implements State<
     }
   }
 
-  // 押下・解放による状態遷移では、同じ境界のホバー表示を維持する。
-  onExit() {}
+  onExit(context: PhonemeTimingEditorContext) {
+    context.cursorState.value = "UNSET";
+    context.hoveredPhoneme.value = undefined;
+  }
 }

@@ -59,13 +59,8 @@ export const usePhonemeTimingEditorStateMachine = (
 
   watch(idleStateId, (value) => {
     if (stateMachine.currentStateId !== value) {
-      refs.hoveredPhoneme.value = undefined;
       stateMachine.transitionTo(value, undefined);
     }
-  });
-
-  watch(computedRefs.selectedTrackId, () => {
-    refs.hoveredPhoneme.value = undefined;
   });
 
   return {

@@ -20,9 +20,6 @@ import {
 } from "@/song/domain";
 import { getPrev } from "@/song/utility";
 
-/** 音素境界の選択・なぞり消しで使う片側の許容幅。 */
-export const PHONEME_TIMING_HIT_THRESHOLD_PX = 6;
-
 // 音素タイミング編集のプレビューデータ
 export type PhonemeTimingPreview =
   | {

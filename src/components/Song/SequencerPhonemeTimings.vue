@@ -363,8 +363,6 @@ const render = () => {
       graphic
         .moveTo(lineX, 0)
         .lineTo(lineX, bandTop)
-        .moveTo(lineX, bandBottom)
-        .lineTo(lineX, canvasHeight)
         .stroke({ width: 1, ...toFillStyle(colors.guide) });
     }
 
@@ -479,16 +477,6 @@ onMounted(async () => {
   stage.addChild(bandGraphic);
 
   const callback = () => {
-    assertNonNullable(renderer);
-    // 画面移動や表示倍率の変更後も、Canvasを実際の画素密度で描画する。
-    if (renderer.resolution !== window.devicePixelRatio) {
-      renderer.resize(
-        renderer.screen.width,
-        renderer.screen.height,
-        window.devicePixelRatio,
-      );
-      renderInNextFrame = true;
-    }
     if (renderInNextFrame) {
       render();
       renderInNextFrame = false;
@@ -579,7 +567,7 @@ onUnmounted(() => {
   padding: 0 v-bind("`${PHONEME_TIMING_LAYOUT.chipPaddingPx}px`");
   border: 1px solid var(--scheme-color-song-phoneme-chip-border);
   border-radius: 6px;
-  box-shadow: 0 2px 4px rgb(0 0 0 / 6%);
+  box-shadow: 0 2px 4px var(--scheme-color-song-phoneme-chip-shadow);
   background: var(--scheme-color-song-phoneme-surface);
   color: var(--scheme-color-on-surface);
   font-size: v-bind("`${PHONEME_TIMING_LAYOUT.labelFontSizePx}px`");
