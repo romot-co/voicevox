@@ -81,10 +81,10 @@ const tooltipStyle = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--scheme-color-song-volume-tooltip-container);
-  border: 1px solid var(--scheme-color-song-volume-tooltip-border);
-  color: var(--scheme-color-song-on-volume-tooltip-container);
-  box-shadow: 0 2px 4px var(--scheme-color-song-volume-tooltip-shadow);
+  background: var(--scheme-color-song-parameter-tooltip-container);
+  border: 1px solid var(--scheme-color-song-parameter-tooltip-border);
+  color: var(--scheme-color-song-on-parameter-tooltip-container);
+  box-shadow: 0 2px 4px var(--scheme-color-song-parameter-tooltip-shadow);
   font-size: 12px;
   line-height: 16px;
   font-variant-numeric: tabular-nums;

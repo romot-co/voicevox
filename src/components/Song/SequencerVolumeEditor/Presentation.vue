@@ -513,14 +513,14 @@ onUnmounted(() => {
   top: 0;
   height: v-bind("`${VOLUME_EDITOR_LAYOUT.noteLaneHeightPx}px`");
   overflow: hidden;
-  color: var(--scheme-color-song-volume-note-tick);
+  color: var(--scheme-color-song-parameter-note-tick);
   font-family: "Unhinted Rounded M+ 1p Medium", sans-serif;
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
 
   &.active {
-    color: var(--scheme-color-song-volume-note-tick-active);
+    color: var(--scheme-color-song-parameter-note-tick-active);
   }
 
   > span {
@@ -536,10 +536,10 @@ onUnmounted(() => {
   top: 0;
   width: 1px;
   height: 6px;
-  background: var(--scheme-color-song-volume-note-tick);
+  background: var(--scheme-color-song-parameter-note-tick);
 
   &.active {
-    background: var(--scheme-color-song-volume-note-tick-active);
+    background: var(--scheme-color-song-parameter-note-tick-active);
   }
 }
 

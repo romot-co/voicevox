@@ -343,20 +343,26 @@ SASSのmapなどで構造化+mixin一括処理などで処理可能ですが、
     var(--lr-94) var(--neutral-c) var(--neutral-h)
   );
 
-  /* パラメータパネルのグリッド線。
-     値は現状シーケンサのグリッドと揃えているが、個別に調整できるよう別定義にしている */
+  /* パラメータパネルの各レーンで共通の色。
+     拍線は編集する図形より目立たないよう、シーケンサのグリッドより薄くしている */
   --scheme-color-song-parameter-grid-measure-line: oklch(
     var(--lr-75) var(--neutral-c) var(--neutral-h)
   );
   --scheme-color-song-parameter-grid-beat-line: oklch(
-    var(--lr-85) var(--neutral-c) var(--neutral-h)
+    var(--lr-90) var(--neutral-c) var(--neutral-h)
+  );
+  --scheme-color-song-parameter-note-tick: oklch(
+    var(--lr-60) var(--neutral-c) var(--neutral-h)
+  );
+  --scheme-color-song-parameter-note-tick-active: oklch(
+    var(--lr-10) var(--neutral-c) var(--neutral-h)
+  );
+  --scheme-color-song-parameter-tooltip-border: oklch(
+    var(--lr-10) var(--neutral-c) var(--neutral-h) / 20%
   );
 
   /* ボリューム編集: 編集履歴によらず、現在の実効線と端点を同じ色で示す。
      減衰はエラーではないため、増幅と同じ緑の面を0dBの上下で読み分ける。 */
-  --scheme-color-song-volume-grid-beat-line: oklch(
-    var(--lr-90) var(--neutral-c) var(--neutral-h)
-  );
   --scheme-color-song-volume-zero-line: oklch(
     var(--lr-55) var(--neutral-c) var(--neutral-h)
   );
@@ -380,15 +386,6 @@ SASSのmapなどで構造化+mixin一括処理などで処理可能ですが、
   );
   --scheme-color-song-volume-axis-label: oklch(
     var(--lr-45) var(--neutral-c) var(--neutral-h)
-  );
-  --scheme-color-song-volume-tooltip-border: oklch(
-    var(--lr-10) var(--neutral-c) var(--neutral-h) / 20%
-  );
-  --scheme-color-song-volume-note-tick: oklch(
-    var(--lr-60) var(--neutral-c) var(--neutral-h)
-  );
-  --scheme-color-song-volume-note-tick-active: oklch(
-    var(--lr-10) var(--neutral-c) var(--neutral-h)
   );
   --scheme-color-song-ruler-surface: oklch(
     var(--lr-90) var(--neutral-c) var(--neutral-h)
@@ -651,20 +648,26 @@ SASSのmapなどで構造化+mixin一括処理などで処理可能ですが、
     var(--lr-14) var(--neutral-c) var(--neutral-h)
   );
 
-  /* パラメータパネルのグリッド線。
-     値は現状シーケンサのグリッドと揃えているが、個別に調整できるよう別定義にしている */
+  /* パラメータパネルの各レーンで共通の色。
+     拍線は編集する図形より目立たないよう、シーケンサのグリッドより薄くしている */
   --scheme-color-song-parameter-grid-measure-line: oklch(
     var(--lr-40) var(--neutral-c) var(--neutral-h)
   );
   --scheme-color-song-parameter-grid-beat-line: oklch(
-    var(--lr-4) var(--neutral-c) var(--neutral-h)
+    var(--lr-14) var(--neutral-c) var(--neutral-h)
+  );
+  --scheme-color-song-parameter-note-tick: oklch(
+    var(--lr-60) var(--neutral-c) var(--neutral-h)
+  );
+  --scheme-color-song-parameter-note-tick-active: oklch(
+    var(--lr-90) var(--neutral-c) var(--neutral-h)
+  );
+  --scheme-color-song-parameter-tooltip-border: oklch(
+    var(--lr-90) var(--neutral-c) var(--neutral-h) / 20%
   );
 
   /* ボリューム編集: 編集履歴によらず、現在の実効線と端点を同じ色で示す。
      減衰はエラーではないため、増幅と同じ緑の面を0dBの上下で読み分ける。 */
-  --scheme-color-song-volume-grid-beat-line: oklch(
-    var(--lr-14) var(--neutral-c) var(--neutral-h)
-  );
   --scheme-color-song-volume-zero-line: oklch(
     var(--lr-65) var(--neutral-c) var(--neutral-h)
   );
@@ -688,15 +691,6 @@ SASSのmapなどで構造化+mixin一括処理などで処理可能ですが、
   );
   --scheme-color-song-volume-axis-label: oklch(
     var(--lr-20) var(--neutral-c) var(--neutral-h)
-  );
-  --scheme-color-song-volume-tooltip-border: oklch(
-    var(--lr-90) var(--neutral-c) var(--neutral-h) / 20%
-  );
-  --scheme-color-song-volume-note-tick: oklch(
-    var(--lr-60) var(--neutral-c) var(--neutral-h)
-  );
-  --scheme-color-song-volume-note-tick-active: oklch(
-    var(--lr-90) var(--neutral-c) var(--neutral-h)
   );
   --scheme-color-song-ruler-surface: oklch(
     var(--lr-30) var(--neutral-c) var(--neutral-h)
@@ -786,9 +780,13 @@ SASSのmapなどで構造化+mixin一括処理などで処理可能ですが、
   --scheme-color-song-volume-value-guide-line: oklch(
     from var(--scheme-color-song-volume-indicator) l c h / 35%
   );
-  --scheme-color-song-volume-tooltip-container: var(--scheme-color-surface);
-  --scheme-color-song-on-volume-tooltip-container: var(
+}
+
+/* パラメータパネル: 各レーンの値表示で共通に使う色。 */
+:root {
+  --scheme-color-song-parameter-tooltip-container: var(--scheme-color-surface);
+  --scheme-color-song-on-parameter-tooltip-container: var(
     --scheme-color-on-surface
   );
-  --scheme-color-song-volume-tooltip-shadow: oklch(var(--lr-0) 0 0 / 5%);
+  --scheme-color-song-parameter-tooltip-shadow: oklch(var(--lr-0) 0 0 / 5%);
 }

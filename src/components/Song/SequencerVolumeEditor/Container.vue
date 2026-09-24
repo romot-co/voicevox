@@ -23,10 +23,7 @@
     @zoomTimeline="(anchorX, deltaY) => emit('zoomTimeline', anchorX, deltaY)"
   >
     <template #grid>
-      <SequencerParameterGrid
-        :viewportInfo="props.viewportInfo"
-        beatLineColorVariable="--scheme-color-song-volume-grid-beat-line"
-      />
+      <SequencerParameterGrid :viewportInfo="props.viewportInfo" />
     </template>
   </Presentation>
 </template>

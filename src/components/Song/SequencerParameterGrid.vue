@@ -19,13 +19,9 @@ import {
 import { assertNonNullable } from "@/type/utility";
 import { createThemeColorResolver } from "@/song/graphics/cssColor";
 
-const props = withDefaults(
-  defineProps<{
-    viewportInfo: ViewportInfo;
-    beatLineColorVariable?: string;
-  }>(),
-  { beatLineColorVariable: "--scheme-color-song-parameter-grid-beat-line" },
-);
+const props = defineProps<{
+  viewportInfo: ViewportInfo;
+}>();
 
 const store = useStore();
 const tpqn = computed(() => store.state.tpqn);
@@ -48,17 +44,15 @@ let resizeObserver: ResizeObserver | undefined;
 let canvasWidth: number | undefined;
 let canvasHeight: number | undefined;
 
-const resolveGridLineColors = computed(() =>
-  createThemeColorResolver({
-    measure: "--scheme-color-song-parameter-grid-measure-line",
-    beat: props.beatLineColorVariable,
-  }),
-);
+const resolveGridLineColors = createThemeColorResolver({
+  measure: "--scheme-color-song-parameter-grid-measure-line",
+  beat: "--scheme-color-song-parameter-grid-beat-line",
+});
 
 const getGridLineColors = () => {
   const containerElement = canvasContainer.value;
   assertNonNullable(containerElement);
-  return resolveGridLineColors.value(containerElement, currentTheme.value);
+  return resolveGridLineColors(containerElement, currentTheme.value);
 };
 
 let renderer: PIXI.Renderer | undefined;
@@ -171,14 +165,7 @@ const render = () => {
 
 // NOTE: mountedをwatchしているので、onMountedの直後に必ず１回実行される
 watch(
-  [
-    mounted,
-    tpqn,
-    timeSignatures,
-    numMeasures,
-    currentTheme,
-    resolveGridLineColors,
-  ],
+  [mounted, tpqn, timeSignatures, numMeasures, currentTheme],
   ([mounted]) => {
     if (mounted) {
       renderInNextFrame = true;
