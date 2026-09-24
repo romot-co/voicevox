@@ -245,7 +245,7 @@ onUnmountedOrDeactivated(() => {
 }
 
 .parameter-area {
-  background: var(--scheme-color-song-phoneme-surface);
+  background: var(--scheme-color-song-grid-cell-white);
   grid-column: 2;
   grid-row: 1;
   overflow: hidden;

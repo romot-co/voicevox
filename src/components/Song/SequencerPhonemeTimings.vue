@@ -536,7 +536,7 @@ onUnmounted(() => {
 }
 
 .phoneme-label {
-  $outline-color: var(--scheme-color-song-phoneme-surface);
+  $outline-color: var(--scheme-color-song-grid-cell-white);
 
   position: absolute;
   overflow: clip;
