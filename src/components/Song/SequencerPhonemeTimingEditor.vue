@@ -10,11 +10,7 @@
       @pointerleave="onPointerMove"
       @wheel="onWheel"
     >
-      <SequencerParameterGrid
-        class="parameter-grid"
-        :viewportInfo
-        beatLineColorVariable="--scheme-color-song-phoneme-grid-beat-line"
-      />
+      <SequencerParameterGrid class="parameter-grid" :viewportInfo />
       <SequencerPhonemeTimings
         class="phoneme-timings"
         :viewportInfo

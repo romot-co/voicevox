@@ -565,11 +565,11 @@ onUnmounted(() => {
   gap: 6px;
   height: v-bind("`${PHONEME_TIMING_LAYOUT.chipHeightPx}px`");
   padding: 0 v-bind("`${PHONEME_TIMING_LAYOUT.chipPaddingPx}px`");
-  border: 1px solid var(--scheme-color-song-phoneme-chip-border);
+  border: 1px solid var(--scheme-color-song-parameter-tooltip-border);
   border-radius: 6px;
-  box-shadow: 0 2px 4px var(--scheme-color-song-phoneme-chip-shadow);
-  background: var(--scheme-color-song-phoneme-surface);
-  color: var(--scheme-color-on-surface);
+  box-shadow: 0 2px 4px var(--scheme-color-song-parameter-tooltip-shadow);
+  background: var(--scheme-color-song-parameter-tooltip-container);
+  color: var(--scheme-color-song-on-parameter-tooltip-container);
   font-size: v-bind("`${PHONEME_TIMING_LAYOUT.labelFontSizePx}px`");
   line-height: v-bind("`${PHONEME_TIMING_LAYOUT.labelHeightPx}px`");
   font-weight: 400;

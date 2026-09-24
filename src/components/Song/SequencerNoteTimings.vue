@@ -44,8 +44,8 @@ const defaultLyricMode = computed(() => store.state.defaultLyricMode);
 const selectedTrack = computed(() => store.getters.SELECTED_TRACK);
 
 const resolveNoteColors = createThemeColorResolver({
-  normal: "--scheme-color-song-phoneme-note-tick",
-  active: "--scheme-color-song-phoneme-note-tick-active",
+  normal: "--scheme-color-song-parameter-note-tick",
+  active: "--scheme-color-song-parameter-note-tick-active",
 });
 const lyrics = ref<
   { id: NoteId; x: number; y: number; width: number; text: string }[]
@@ -260,10 +260,10 @@ onUnmounted(() => {
   font-size: 12px;
   line-height: 16px;
   font-weight: 500;
-  color: var(--scheme-color-song-phoneme-note-tick);
+  color: var(--scheme-color-song-parameter-note-tick);
 
   &.active {
-    color: var(--scheme-color-song-phoneme-note-tick-active);
+    color: var(--scheme-color-song-parameter-note-tick-active);
   }
 }
 </style>
